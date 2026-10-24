@@ -1,9 +1,9 @@
-param([string]$Installer='artifacts/installer-test-output/Liangtu-0.6.3-InstallerTest-x64.exe')
+param([string]$Installer='artifacts/installer-test-output-r2/Liangtu-0.6.3-InstallerTest-x64-r2.exe',[string]$TestRoot='artifacts/install-qa-r2')
 $ErrorActionPreference='Stop'
 $projectRoot=Split-Path $PSScriptRoot -Parent
 $installerPath=(Resolve-Path -LiteralPath (Join-Path $projectRoot $Installer)).Path
 if([IO.Path]::GetFileName($installerPath) -notlike '*-InstallerTest-*'){throw 'Only an isolated test installer may be used'}
-$qaRoot=Join-Path $projectRoot 'artifacts/install-qa'
+$qaRoot=Join-Path $projectRoot $TestRoot
 $appDir=Join-Path $qaRoot '程序 files'
 $dataRoot=Join-Path $qaRoot 'data'
 foreach($path in @($appDir,$dataRoot)){

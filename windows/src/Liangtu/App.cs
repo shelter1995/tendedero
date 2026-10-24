@@ -17,6 +17,15 @@ public sealed partial class App : Application
         get; private set;
     }
     int trayIconState = -1;
+    readonly OperationSounds sounds = new();
+    bool exiting;
+    async void ExitAfterCopy()
+    {
+        if (exiting) return;
+        exiting = true; Line.Retract();
+        if (await Store.FinishCopyBeforeExit()) Shutdown();
+        else { exiting = false; tray?.ShowBalloonTip(4000, "剪贴板仍被占用", "已暂缓退出，请完成粘贴或重新复制后再退出。", System.Windows.Forms.ToolTipIcon.Info); }
+    }
     public bool TestMode
     {
         get; private set;
@@ -54,9 +63,11 @@ public sealed partial class App : Application
         Store.Added += p => { if (Settings.NewReveal) Line.Reveal(false, 2.5); UpdateTray(); };
         Store.Changed += _ => UpdateTray();
         Store.Hanging += p => { Native.GetCursorPos(out var point); if (p.Origin is Rect origin) { point.X = (int)(origin.X + origin.Width / 2); point.Y = (int)(origin.Y + origin.Height / 2); } Line.MoveTo(System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(point.X, point.Y))); Line.ResetScroll(); };
-        Store.Removing += (_, quiet) => { if (!quiet) Sound(); };
-        Store.Added += _ => Sound();
         await Store.Restore();
+        Store.Removing += (_, quiet) => { if (!quiet) sounds.Play(OperationCue.TakeDown, Settings.Sounds && !TestMode); };
+        Store.Added += _ => sounds.Play(OperationCue.Hang, Settings.Sounds && !TestMode);
+        Store.Copied += _ => sounds.Play(OperationCue.Copy, Settings.Sounds && !TestMode);
+        Exit += (_, _) => sounds.Dispose();
         if (TestMode)
         {
             if (args.Contains("--demo"))
@@ -138,11 +149,6 @@ public sealed partial class App : Application
         Settings.Log($"Hotkey id={id}, registered={registered}, key={key}, modifiers={modifiers}, error={(registered ? 0 : System.Runtime.InteropServices.Marshal.GetLastWin32Error())}");
         return registered;
     }
-    public void Sound()
-    {
-        if (Settings.Sounds && !TestMode)
-            System.Media.SystemSounds.Asterisk.Play();
-    }
     public void Open(Photo p) => Theme.Shell(p.Path);
     public void Preview(Photo p)
     {
@@ -158,6 +164,7 @@ public sealed partial class App : Application
             WindowPresenter.Show(new TrimWindow(this, p), screen);
         else
             WindowPresenter.Show(new EditorWindow(this, p), screen);
+        sounds.Play(OperationCue.Edit, Settings.Sounds && !TestMode);
     }
     public void Discard(Card c)
     {

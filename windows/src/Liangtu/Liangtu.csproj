@@ -2,10 +2,11 @@
  <PropertyGroup>
   <OutputType>WinExe</OutputType><TargetFramework>net8.0-windows</TargetFramework>
   <UseWPF>true</UseWPF><UseWindowsForms>true</UseWindowsForms><Nullable>enable</Nullable><ImplicitUsings>disable</ImplicitUsings>
-  <AssemblyName>Liangtu</AssemblyName><Version>0.6.3</Version><PlatformTarget>x64</PlatformTarget>
+  <AssemblyName>Liangtu</AssemblyName><Version>0.7.2</Version><PlatformTarget>x64</PlatformTarget>
   <ApplicationManifest>app.manifest</ApplicationManifest><ApplicationIcon>Assets/app.ico</ApplicationIcon><StartupObject>Liangtu.App</StartupObject>
  </PropertyGroup>
  <ItemGroup><Resource Include="Assets/app.png"/><Resource Include="Assets/tray-light.ico"/><Resource Include="Assets/tray-dark.ico"/><Resource Include="Assets/app.ico"/><ProjectReference Include="../Liangtu.Core/Liangtu.Core.csproj" GlobalPropertiesToRemove="StartupObject"/></ItemGroup>
  <ItemGroup><Content Include="../../native/GlassNative.dll" Link="GlassNative.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
+ <ItemGroup><EmbeddedResource Include="Assets/Sounds/B-*.wav" /></ItemGroup>
  <ItemGroup><Content Include="../../reference/tendedero/Sources/Tendedero/Resources/**/*.strings" Link="Languages/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
 </Project>

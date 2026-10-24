@@ -5,9 +5,11 @@ public sealed partial class EditorWindow
 {
     readonly Border currentColor = new() { Width = 20, Height = 20, CornerRadius = new CornerRadius(10), BorderThickness = new Thickness(1), BorderBrush = Theme.Outline };
     readonly List<(Color color, RadioButton button)> swatches = new();
+    StackPanel? brushProperties;
     internal void SelectTool(string value)
     {
-        CancelStroke(); tool = value; viewport.PanMode = value == "平移";
+        CancelStroke(); CommitText(); selectedText = null; tool = value; viewport.PanMode = value == "平移"; RebuildTextViews();
+        foreach (var button in toolKeys.Values) if (((string?)button.ToolTip)?.StartsWith(value + " ·", StringComparison.Ordinal) == true && button.IsChecked != true) button.IsChecked = true;
         status.Text = value == "平移" ? "拖动画布 · 方向键平移" : value == "文字" ? "点击图片添加文字" : value == "裁剪" ? "拖动选择保留区域" : value == "矩形" ? "拖动绘制矩形 · 按住 Shift 画正方形" : value == "圆形" ? "拖动绘制椭圆 · 按住 Shift 画正圆" : value is "直线" or "箭头" ? "按住 Shift 限制为水平、垂直或 45°" : value == "橡皮擦" ? "擦除标注，保留原图" : "滚轮缩放 · 空格 / 中键拖动画布";
     }
     UIElement BuildLayout()
@@ -41,7 +43,7 @@ public sealed partial class EditorWindow
         var toolBar = new Border { Background = Theme.ControlSurface, BorderBrush = Theme.Outline, BorderThickness = new Thickness(0, 0, 0, 1), Child = tools };
         DockPanel.SetDock(toolBar, Dock.Top); root.Children.Add(toolBar);
 
-        var properties = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(12, 5, 12, 5) };
+        var properties = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(12, 5, 12, 5) };
         var palette = Theme.Button("", () => { CancelStroke(); var chosen = AnnotationColors.Choose(this, color, app.Settings); if (chosen is Color value) SetColor(value); });
         var paletteContent = new StackPanel { Orientation = Orientation.Horizontal }; paletteContent.Children.Add(currentColor);
         var chevron = Glyph("M2,7 L12,18 L22,7"); chevron.Width = chevron.Height = 10; chevron.Margin = new Thickness(6, 0, 1, 0); paletteContent.Children.Add(chevron);
@@ -55,10 +57,12 @@ public sealed partial class EditorWindow
             Hint(button, "颜色 " + hex); button.Checked += (_, _) => SetColor(value); swatches.Add((value, button)); properties.Children.Add(button);
         }
         properties.Children.Add(Divider());
-        properties.Children.Add(new TextBlock { Text = "笔宽", Foreground = Theme.Muted, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 4, 0) });
+        brushProperties = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        brushProperties.Children.Add(new TextBlock { Text = "笔宽", Foreground = Theme.Muted, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 4, 0) });
         var sizeLabel = new TextBlock { Text = "4 px", Width = 42, Foreground = Theme.Muted, VerticalAlignment = VerticalAlignment.Center };
         var size = new Slider { Minimum = 1, Maximum = 24, Value = brushWidth, TickFrequency = 1, IsSnapToTickEnabled = true, Width = 104, Margin = new Thickness(8, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center };
-        Hint(size, "笔宽 · 图像像素"); size.ValueChanged += (_, _) => { brushWidth = size.Value; sizeLabel.Text = $"{brushWidth:0} px"; }; properties.Children.Add(size); properties.Children.Add(sizeLabel);
+        Hint(size, "笔宽 · 图像像素"); size.ValueChanged += (_, _) => { brushWidth = size.Value; sizeLabel.Text = $"{brushWidth:0} px"; }; brushProperties.Children.Add(size); brushProperties.Children.Add(sizeLabel);
+        properties.Children.Add(brushProperties); properties.Children.Add(BuildTextProperties());
         var propertyBar = new Border { BorderBrush = Theme.Outline, BorderThickness = new Thickness(0, 0, 0, 1), Child = properties };
         DockPanel.SetDock(propertyBar, Dock.Top); root.Children.Add(propertyBar);
 
@@ -72,7 +76,7 @@ public sealed partial class EditorWindow
         viewControls.Children.Add(Small(IconButton("放大 · +", "M5,12 L19,12 M12,5 L12,19", () => viewport.ZoomBy(1.25))));
         var actual = Theme.Button("100%", () => viewport.SetZoom(1)); actual.Padding = new Thickness(8, 3, 8, 3); actual.MinHeight = 30; Hint(actual, "实际大小 · Ctrl + 1"); viewControls.Children.Add(actual);
         viewControls.Children.Add(Small(IconButton("适应窗口 · F / Ctrl + 0", "M3,9 L3,3 L9,3 M15,3 L21,3 L21,9 M21,15 L21,21 L15,21 M9,21 L3,21 L3,15", viewport.Fit)));
-        viewport.Changed += () => zoomLabel.Text = $"{viewport.Zoom * 100:0.#}%";
+        viewport.Changed += () => { zoomLabel.Text = $"{viewport.Zoom * 100:0.#}%"; foreach (var text in texts) ApplyTextView(text); };
         DockPanel.SetDock(viewControls, Dock.Right); footer.Children.Add(viewControls);
         var info = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         dimensions.FontSize = 11; dimensions.Foreground = Theme.Muted; info.Children.Add(dimensions);
@@ -83,6 +87,7 @@ public sealed partial class EditorWindow
     void SetColor(Color value)
     {
         color = value; currentColor.Background = new SolidColorBrush(value); currentColor.ToolTip = value.ToString();
+        if (!updatingTextProperties && tool == "文字") { ChangeTextStyle(textFont, textSize, value, textBold, textItalic); return; }
         foreach (var swatch in swatches) swatch.button.IsChecked = swatch.color == value;
         app.Settings.AnnotationColor = $"#{value.R:X2}{value.G:X2}{value.B:X2}";
         try { app.Settings.Save(); } catch (Exception e) { Settings.Log("Annotation colors " + e.Message); }

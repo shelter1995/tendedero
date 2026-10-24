@@ -11,13 +11,21 @@ internal static class ClipboardIntegrationChecks
     public static int Main(string[] args)
     {
         Settings.Root = Path.GetFullPath(args[0]); Directory.CreateDirectory(Settings.Root);
+        IntPtr desktop = IntPtr.Zero;
+        if (!args.Contains("--prepare-only")) {
         var station = CreateWindowStation("LiangtuClipboardTest-" + Guid.NewGuid().ToString("N"), 0, 0x37F, IntPtr.Zero);
         if (station == IntPtr.Zero || !SetProcessWindowStation(station)) return Unavailable("private window station");
-        var desktop = CreateDesktop("default", IntPtr.Zero, IntPtr.Zero, 0, 0x1FF, IntPtr.Zero);
+        desktop = CreateDesktop("default", IntPtr.Zero, IntPtr.Zero, 0, 0x1FF, IntPtr.Zero);
         if (desktop == IntPtr.Zero || !SetThreadDesktop(desktop)) return Unavailable("private desktop");
+        }
         // Station/desktop handles live until this isolated process exits.
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         app.Startup += async (_, _) => {
+            if (args.Contains("--latency")) {
+                try { await MeasureLatency(!args.Contains("--prepare-only")); app.Shutdown(0); }
+                catch (Exception e) { File.WriteAllText(Path.Combine(Settings.Root, "latency.txt"), "FAIL " + e); app.Shutdown(1); }
+                return;
+            }
             using var ready = new ManualResetEventSlim();
             Exception? holderError = null;
             var holder = new Thread(() => {
@@ -55,6 +63,24 @@ internal static class ClipboardIntegrationChecks
     {
         var message = $"UNAVAILABLE {stage}: Win32 error {Marshal.GetLastWin32Error()}; no interactive clipboard access attempted.";
         File.WriteAllText(Path.Combine(Settings.Root, "result.txt"), message); Console.WriteLine(message); return 2;
+    }
+    static async Task MeasureLatency(bool native)
+    {
+        var log = new List<string> { $"SystemDoubleClickTime={Native.GetDoubleClickTime()}ms; {(native ? "private Windows clipboard" : "REAL image preparation + controlled writer (no native clipboard/flush measurement)")}; synthetic PNG; three copies per size." };
+        foreach (var size in new[] { (1920, 1080), (3840, 2160) }) {
+            var pixels = new byte[size.Item1 * size.Item2 * 4]; var random = new Random(7);
+            for (int i = 0; i < pixels.Length; i += 4) { var v = random.Next(256); pixels[i] = (byte)v; pixels[i + 1] = (byte)(v / 2); pixels[i + 2] = (byte)(255 - v); pixels[i + 3] = 255; }
+            var path = Path.Combine(Settings.Root, $"fixture-{size.Item1}.png");
+            MediaTools.SavePng(BitmapSource.Create(size.Item1, size.Item2, 96, 96, PixelFormats.Bgra32, null, pixels, size.Item1 * 4), path);
+            DataObject? published = null;
+            var store = native ? new Store(new Settings()) : new Store(new Settings(), new ClipboardWriter(data => published = data, () => { }, _ => true)); var times = new List<double>();
+            for (int i = 0; i < 3; i++) {
+                var timer = System.Diagnostics.Stopwatch.StartNew(); await store.Copy(new Photo { Path = path }); times.Add(timer.Elapsed.TotalMilliseconds);
+                if (native ? !Clipboard.ContainsImage() || !Clipboard.ContainsData("PNG") : published?.GetDataPresent("PNG", false) != true) throw new Exception("Published clipboard data missing");
+            }
+            log.Add($"{size.Item1}x{size.Item2}: CopyToSuccessMs={string.Join(",", times.Select(v => v.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)))}; MedianMs={times.OrderBy(v => v).ElementAt(1):F1}");
+        }
+        File.WriteAllLines(Path.Combine(Settings.Root, "latency.txt"), log); Console.WriteLine(string.Join(Environment.NewLine, log));
     }
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern IntPtr CreateWindowStation(string name, uint flags, uint access, IntPtr security);
     [DllImport("user32.dll", SetLastError = true)] static extern bool SetProcessWindowStation(IntPtr station);

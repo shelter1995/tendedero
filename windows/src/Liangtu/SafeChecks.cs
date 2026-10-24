@@ -118,6 +118,7 @@ public static class SafeChecks
                 Assert(first.IsFirst && !second.IsFirst && signaled.Wait(1000));
             });
             UiChecks.Run(app, Test);
+            SoundChecks.Run(Test);
             ToolbarChecks.Run(app, Test);
             var captureSettings = new Settings { Keep = 100 };
             var captureStore = new Store(captureSettings);

@@ -31,6 +31,10 @@ public sealed class Settings
     public uint CaptureHotkeyModifiers { get; set; } = 3;
     public uint CaptureHotkeyKey { get; set; } = 0x53;
     public string AnnotationColor { get; set; } = "#E24D40";
+    public string TextFontFamily { get; set; } = "Microsoft YaHei UI";
+    public double TextFontSize { get; set; } = 28;
+    public bool TextBold { get; set; }
+    public bool TextItalic { get; set; }
     public int[] AnnotationCustomColors { get; set; } = Enumerable.Repeat(0xFFFFFF, 16).ToArray();
     public List<string> ExtraFolders { get; set; } = new();
     public List<string> Items { get; set; } = new();

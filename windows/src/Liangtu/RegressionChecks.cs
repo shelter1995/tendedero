@@ -37,7 +37,7 @@ public static class RegressionChecks
             return b;
         }
 
-        await Check("single-click timer runs without rendering", async () => { var calls = 0; var clock = Stopwatch.StartNew(); using var timer = new GestureScheduler(a => { if (a == GestureAction.Copy) calls++; }, () => clock.Elapsed.TotalSeconds); timer.Down(0); timer.Up(.01, .9); await Task.Delay(1100); return calls == 1; });
+        await Check("single-click action is immediate without a rendering tick", async () => { var calls = 0; var clock = Stopwatch.StartNew(); using var timer = new GestureScheduler(a => { if (a == GestureAction.Copy) calls++; }, () => clock.Elapsed.TotalSeconds); timer.Down(0); var action = timer.Up(.01, .9); await Task.Delay(40); return action == GestureAction.Copy && calls == 0; });
         await Check("local eraser restores only its target", () => { var clean = Solid(100, 100, Colors.Blue); var marked = Solid(100, 100, Colors.Red); var eraser = new RasterEraser(marked, clean); eraser.Erase(new Point(20, 20), new Point(25, 20), 8); var pixels = new byte[40000]; eraser.Image.CopyPixels(pixels, 400, 0); return Task.FromResult(pixels[20 * 400 + 20 * 4] == 255 && pixels[80 * 400 + 80 * 4 + 2] == 255); });
         await Check("multi-frame images require a separate edited copy", () => { var path = Path.Combine(root, "animated.gif"); var encoder = new GifBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(Solid(20, 20, Colors.Red))); encoder.Frames.Add(BitmapFrame.Create(Solid(20, 20, Colors.Blue))); using (var stream = File.Create(path)) encoder.Save(stream); return Task.FromResult(MediaTools.NeedsSeparateEdit(path)); });
         var videoSource = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "trim-test.mp4"));

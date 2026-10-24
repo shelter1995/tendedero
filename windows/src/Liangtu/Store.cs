@@ -19,6 +19,19 @@ public sealed class Store
     readonly Settings settings; readonly HashSet<string> loading = new(StringComparer.OrdinalIgnoreCase);
     readonly ClipboardWriter clipboardWriter;
     System.Threading.CancellationTokenSource? copyCancellation;
+    TaskCompletionSource<bool>? copyCompletion;
+    bool exitRequested;
+    internal async Task<bool> FinishCopyBeforeExit()
+    {
+        exitRequested = true;
+        if (copyCompletion != null) await copyCompletion.Task;
+        var safe = true;
+        // The latest request may have failed before replacing an older published
+        // object. Always persist whichever object we still own before quitting.
+        try { await clipboardWriter.FinishPersistenceAsync(); } catch (ExternalException) { safe = false; }
+        if (!safe) exitRequested = false;
+        return safe;
+    }
     public List<Photo> Items { get; } = new();
     public event Action<Photo?>? Changed;
     public event Action<Photo>? Added;
@@ -248,43 +261,49 @@ public sealed class Store
     string? lastHash, lastPath;
     public async Task Copy(Photo p)
     {
+        if (exitRequested) return;
         copyCancellation?.Cancel();
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        copyCompletion = completion;
         using var request = new System.Threading.CancellationTokenSource();
         copyCancellation = request;
         ++clipboardGeneration;
+        bool published = false;
+        bool safeToExit = true;
         try
         {
+            // Register requests before yielding so an older completion cannot
+            // clear the new pending feedback. Let the UI paint before native IO.
+            await Dispatcher.Yield(DispatcherPriority.Background);
+            request.Token.ThrowIfCancellationRequested();
+            var payload = p.Video ? null : await Task.Run(() => ClipboardPayload.Load(p.Path), request.Token);
+            request.Token.ThrowIfCancellationRequested();
             var data = new DataObject();
             data.SetData(DataFormats.FileDrop, new[] { p.Path });
             data.SetData("Liangtu.Internal", true);
-            if (!p.Video)
+            if (payload != null)
             {
-                var image = MediaTools.LoadImage(p.Path);
-                data.SetImage(image);
-                var encoder = new PngBitmapEncoder();
-                encoder.Frames.Add(BitmapFrame.Create(image));
-                var png = new MemoryStream();
-                encoder.Save(png);
-                png.Position = 0;
-                data.SetData("PNG", png);
+                data.SetImage(payload.Image);
+                data.SetData("PNG", new MemoryStream(payload.Png, false));
             }
-            if (await clipboardWriter.WriteAsync(data, request.Token))
-            {
+            var persisted = await clipboardWriter.WriteAsync(data, request.Token, () => {
                 request.Token.ThrowIfCancellationRequested();
+                published = true;
                 Copied?.Invoke(p);
-            }
-            else if (!request.IsCancellationRequested)
+            });
+            if (!persisted && !published && !request.IsCancellationRequested)
                 Error?.Invoke("复制期间剪贴板被其他应用更新，请再复制一次。");
         }
         catch (OperationCanceledException) when (request.IsCancellationRequested) { }
         catch (Exception e)
         {
             if (request.IsCancellationRequested) return;
+            safeToExit = !published;
             Settings.Log($"Clipboard copy failed hr=0x{e.HResult:X8}: {e}");
-            Error?.Invoke(ClipboardWriter.IsBusy(e) ? "剪贴板暂时被其他程序占用，自动重试后仍无法复制。请稍后再试；截图仍保留在晾衣绳上。" : "复制失败：" + e.Message);
+            Error?.Invoke(published ? "图片已复制，但剪贴板持久化失败。请保持晾图运行并完成粘贴。" : ClipboardWriter.IsBusy(e) ? "剪贴板暂时被其他程序占用，自动重试后仍无法复制。请稍后再试；截图仍保留在晾衣绳上。" : "复制失败：" + e.Message);
             throw;
         }
-        finally { if (ReferenceEquals(copyCancellation, request)) copyCancellation = null; }
+        finally { if (ReferenceEquals(copyCancellation, request)) copyCancellation = null; completion.TrySetResult(safeToExit); }
     }
 }
 

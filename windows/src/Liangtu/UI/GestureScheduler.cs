@@ -26,6 +26,7 @@ public sealed class GestureScheduler : IDisposable
         var a = policy.Up(time, interval);
         if (policy.HasPending)
             timer.Start();
+        else timer.Stop();
         return a;
     }
     public void Cancel()

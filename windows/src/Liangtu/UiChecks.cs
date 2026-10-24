@@ -34,7 +34,47 @@ internal static class UiChecks
         var bitmap = new RenderTargetBitmap(960, 600, 96, 96, PixelFormats.Pbgra32); bitmap.Render(fixture); bitmap.Freeze();
         var path = Path.Combine(output, "sample.png"); MediaTools.SavePng(bitmap, path);
         var photo = new Photo { Path = path, Image = bitmap };
+        test("successful copy feedback is immediately fully visible", () => {
+            var card = new Card(photo, app); card.SetCopied(true);
+            var group = (Grid)card.Children[0]; var feedback = (Border)group.Children[group.Children.Count - 1];
+            if (feedback.Opacity != 1) throw new Exception("Copy success still waits for a fade-in");
+        });
+        test("copying feedback is immediate and never claims premature success", () => {
+            var card = new Card(photo, app); card.SetCopying();
+            var group = (Grid)card.Children[0]; var feedback = (Border)group.Children[group.Children.Count - 1];
+            if (feedback.Opacity != 1 || ((TextBlock)feedback.Child).Text != "正在复制…" || !card.Busy) throw new Exception("Missing honest pending feedback");
+            card.SetCopied(true);
+            if (card.Busy || ((TextBlock)feedback.Child).Text != "✓  " + Localization.Text("Copied")) throw new Exception("Pending state survived successful publication");
+        });
+        test("card corner hit target works across sibling visuals and transforms", () => {
+            var originalScale = app.Settings.Scale;
+            try {
+                foreach (var size in new[] { .8, 1.0, 1.35 }) {
+                    app.Settings.Scale = size;
+                    var card = new Card(photo, app);
+                    var group = (Grid)card.Children[0];
+                    var frame = (Border)group.Children[0];
+                    var cross = (Border)group.Children[2];
+                    foreach (var tilt in new[] { -8.0, 0, 8.0 }) {
+                        group.RenderTransform = new RotateTransform(tilt, 125, 0);
+                        frame.RenderTransform = new ScaleTransform(1.035, 1.035);
+                        cross.RenderTransform = new ScaleTransform(.8, .8);
+                        card.Measure(new Size(250, 300)); card.Arrange(new Rect(0, 0, 250, 300));
+                        var center = cross.TranslatePoint(new Point(10, 10), frame);
+                        if (!HitSurface.Contains(cross, frame, center, 10))
+                            throw new Exception($"Corner center missed at size={size}, tilt={tilt}");
+                        foreach (var local in new[] { new Point(0, 0), new Point(21, 10) }) {
+                            if (HitSurface.Contains(cross, frame, cross.TranslatePoint(local, frame), 10))
+                                throw new Exception("Outside/circular corner incorrectly accepted");
+                        }
+                        if (!HitSurface.Contains(frame, card, frame.TranslatePoint(new Point(frame.Width / 2, frame.Height / 2), card), 16))
+                            throw new Exception("Existing ancestor hit testing regressed");
+                    }
+                }
+            } finally { app.Settings.Scale = originalScale; }
+        });
         EditorChecks.RunUi(app, photo, test);
+        TextChecks.Run(app, photo, test);
         test("editor and dialogs render without showing windows or injecting input", () => {
             Render(new EditorWindow(app, photo), "editor", 1120, 740);
             Render(new EditorWindow(app, photo), "editor-compact", 760, 460);

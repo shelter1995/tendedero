@@ -15,7 +15,7 @@ public sealed class Card : Canvas
     readonly ScaleTransform flightScale = new(1, 1, 125, 14); readonly RotateTransform rotate = new(); readonly TranslateTransform fall = new(); readonly ScaleTransform scale = new(1, 1); readonly Grid group = new();
     readonly TranslateTransform ropeFollow = new();
     readonly Stopwatch clock = Stopwatch.StartNew(); Point down; double nudgeStart, nudgeAmount = 16, nudgeFrom; bool arriving = true; double copiedUntil;
-    bool hover, pressed, dragging, falling, landed, cancelDragRequested, arrivalCancelled; double? fallingAt; public bool Busy => pressed || dragging || ContextMenu?.IsOpen == true;
+    bool hover, pressed, dragging, falling, landed, cancelDragRequested, arrivalCancelled, copying; int copyRequest; double? fallingAt; public bool Busy => pressed || dragging || copying || ContextMenu?.IsOpen == true;
     internal bool RenderingAttached { get; private set; }
     public double CardWidth => frame.Width; public double CardHeight => frame.Height;
     public Card(Photo photo, App app)
@@ -77,7 +77,7 @@ public sealed class Card : Canvas
         frame.MouseEnter += (_, _) => { hover = true; VisualState(); };
         frame.MouseLeave += (_, _) => { hover = false; VisualState(); };
         frame.MouseLeftButtonDown += (_, e) => { var p = e.GetPosition(frame); if (cross.Opacity > .1 && HitSurface.Contains(cross, frame, p, 10)) { app.Discard(this); e.Handled = true; return; } down = e.GetPosition(this); pressed = true; frame.CaptureMouse(); Act(gesture.Down(clock.Elapsed.TotalSeconds, e.ClickCount)); VisualState(); e.Handled = true; };
-        frame.MouseLeftButtonUp += (_, e) => { if (pressed) { gesture.Up(clock.Elapsed.TotalSeconds, Native.GetDoubleClickTime() / 1000.0); pressed = false; frame.ReleaseMouseCapture(); VisualState(); } e.Handled = true; };
+        frame.MouseLeftButtonUp += (_, e) => { if (pressed) { var action = gesture.Up(clock.Elapsed.TotalSeconds, Native.GetDoubleClickTime() / 1000.0); pressed = false; frame.ReleaseMouseCapture(); Act(action); VisualState(); } e.Handled = true; };
         frame.MouseMove += (_, e) => { if (pressed) { var v = e.GetPosition(this) - down; Act(gesture.Move(v.Length)); } };
         frame.LostMouseCapture += (_, _) => { if (pressed && !dragging) { pressed = false; gesture.Cancel(); VisualState(); } };
         frame.QueryContinueDrag += (_, e) => { if (e.EscapePressed || cancelDragRequested) { e.Action = DragAction.Cancel; e.Handled = true; } };
@@ -148,8 +148,11 @@ public sealed class Card : Canvas
     }
     async Task CopyPhoto()
     {
+        var request = ++copyRequest;
+        SetCopying();
         try { await app.Store.Copy(Photo); }
         catch { /* Store publishes the final user-facing error exactly once. */ }
+        finally { if (request == copyRequest && copying) SetCopied(false); }
     }
     public void Nudge(double degrees)
     {
@@ -160,10 +163,19 @@ public sealed class Card : Canvas
     }
     public void SetCopied(bool value)
     {
+        copying = false;
+        ((TextBlock)copied.Child).Text = "✓  " + Localization.Text("Copied");
         copiedUntil = value ? clock.Elapsed.TotalSeconds + 1.2 : 0;
-        Theme.Animate(copied, OpacityProperty, value ? 1 : 0, .2);
+        if (value) { copied.BeginAnimation(OpacityProperty, null); copied.Opacity = 1; }
+        else Theme.Animate(copied, OpacityProperty, 0, .2);
         if (value)
             Nudge(3);
+    }
+    internal void SetCopying()
+    {
+        copying = true; copiedUntil = 0;
+        ((TextBlock)copied.Child).Text = "正在复制…";
+        copied.BeginAnimation(OpacityProperty, null); copied.Opacity = 1;
     }
     public void CancelInput()
     {

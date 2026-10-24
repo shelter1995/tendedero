@@ -79,14 +79,14 @@ public sealed partial class App
         m.Items.Add(Item("打开截图文件夹", () => Theme.Shell(Settings.Inbox)));
         m.Items.Add(Item("框选截图", Capture));
         m.Items.Add(new Separator());
-        m.Items.Add(Item("声音", () => { Settings.Sounds = !Settings.Sounds; SaveSettings(); }, Settings.Sounds));
+        m.Items.Add(Item("声音", () => { Settings.Sounds = !Settings.Sounds; if (!Settings.Sounds) sounds.Stop(); SaveSettings(); }, Settings.Sounds));
         m.Items.Add(Item("登录时打开", ToggleLogin, IsLogin()));
         var updates = Item(Localization.Text("Check for Updates…"), () => Theme.Shell("https://github.com/alejandrobujan/tendedero/releases"));
         updates.ToolTip = "查看上游 macOS 项目的发布记录；本 Windows 移植版通过本地构建更新。";
         m.Items.Add(updates);
         m.Items.Add(Item("关于晾图 / 版本说明", ShowAbout));
         m.Items.Add(new Separator());
-        m.Items.Add(Item("退出晾图", () => Shutdown()));
+        m.Items.Add(Item("退出晾图", ExitAfterCopy));
         return m;
     }
     public void OpenTrayMenu() => NativeMenu.Show(CreateTrayMenu(), Line);

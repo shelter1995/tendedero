@@ -9,13 +9,13 @@ public static class Layout {
 }
 public enum GestureAction { None,Copy,Open,Edit,Drag,Preview }
 public class Gesture {
- double? down,copyAt;bool consumed;
- public bool HasPending=>down!=null||copyAt!=null;
+ double? down;bool consumed;
+ public bool HasPending=>down!=null;
  public GestureAction Down(double now,int clicks=1){if(clicks>1){Cancel();return GestureAction.Open;}down=now;consumed=false;return GestureAction.None;}
- public GestureAction Move(double distance){if(down!=null&&!consumed&&distance>4){consumed=true;copyAt=null;return GestureAction.Drag;}return GestureAction.None;}
- public GestureAction Up(double now,double doubleClickSeconds){if(down!=null&&!consumed)copyAt=now+doubleClickSeconds;down=null;consumed=false;return GestureAction.None;}
- public GestureAction Tick(double now){if(down!=null&&!consumed&&now-down>=.45){consumed=true;copyAt=null;return GestureAction.Edit;}if(copyAt!=null&&now>=copyAt){copyAt=null;return GestureAction.Copy;}return GestureAction.None;}
- public void Cancel(){down=null;copyAt=null;consumed=false;}
+ public GestureAction Move(double distance){if(down!=null&&!consumed&&distance>4){consumed=true;return GestureAction.Drag;}return GestureAction.None;}
+ public GestureAction Up(double now,double doubleClickSeconds){var action=down!=null&&!consumed?GestureAction.Copy:GestureAction.None;down=null;consumed=false;return action;}
+ public GestureAction Tick(double now){if(down!=null&&!consumed&&now-down>=.45){consumed=true;return GestureAction.Edit;}return GestureAction.None;}
+ public void Cancel(){down=null;consumed=false;}
 }
 public static class FileRules {
  public static bool IsInside(string file,string folder){var root=Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar,Path.AltDirectorySeparatorChar)+Path.DirectorySeparatorChar;return Path.GetFullPath(file).StartsWith(root,StringComparison.OrdinalIgnoreCase);}

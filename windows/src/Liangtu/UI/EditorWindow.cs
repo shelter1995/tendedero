@@ -30,6 +30,7 @@ public sealed partial class EditorWindow : Window
         this.app = app; this.photo = photo;
         history = new EditHistory(MediaTools.LoadImage(photo.Path));
         color = AnnotationColors.Parse(app.Settings.AnnotationColor);
+        InitializeTextDefaults();
         Title = System.IO.Path.GetFileName(photo.Path) + " — 标注";
         Width = Math.Min(1120, SystemParameters.WorkArea.Width - 40);
         Height = Math.Min(800, SystemParameters.WorkArea.Height - 40);
@@ -51,13 +52,13 @@ public sealed partial class EditorWindow : Window
         canvas.LostMouseCapture += (_, _) => { if (Drawing) CancelStroke(); };
         PreviewKeyDown += OnKey;
         PreviewKeyUp += (_, e) => {
-            if (e.Key == Key.Space) { viewport.SpaceHeld = false; e.Handled = true; }
+            if (e.Key == Key.Space && e.OriginalSource is not TextBox) { viewport.SpaceHeld = false; e.Handled = true; }
             else if (e.Key is Key.LeftShift or Key.RightShift && UpdateShapeConstraint(Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift))) e.Handled = true;
         };
         Deactivated += (_, _) => { viewport.SpaceHeld = false; viewport.EndPan(); CancelStroke(); };
         Closing += (_, e) => {
             if (saving) { e.Cancel = true; return; }
-            CancelStroke();
+            CancelStroke(); CommitText();
             if (history.IsDirty && MessageBox.Show(this, "放弃尚未保存的标注？", "晾图", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) e.Cancel = true;
         };
     }
@@ -67,35 +68,52 @@ public sealed partial class EditorWindow : Window
         var bitmap = history.Current.Image; image.Source = bitmap;
         image.Width = canvas.Width = bitmap.PixelWidth; image.Height = canvas.Height = bitmap.PixelHeight;
         viewport.SetImageSize(bitmap.PixelWidth, bitmap.PixelHeight);
+        texts.Clear(); texts.AddRange(history.Current.Texts); selectedText = null;
+        RebuildTextViews();
         dimensions.Text = $"{bitmap.PixelWidth} × {bitmap.PixelHeight} px";
         undoButton.IsEnabled = history.CanUndo; redoButton.IsEnabled = history.CanRedo;
     }
-    internal BitmapSource Flatten()
+    internal BitmapSource Flatten(bool includeText = true)
     {
         // View transforms live on the parent, never on this image-pixel canvas.
         canvas.Measure(new Size(canvas.Width, canvas.Height)); canvas.Arrange(new Rect(0, 0, canvas.Width, canvas.Height)); canvas.UpdateLayout();
         var bitmap = new RenderTargetBitmap((int)canvas.Width, (int)canvas.Height, 96, 96, PixelFormats.Pbgra32);
-        bitmap.Render(canvas); bitmap.Freeze(); return bitmap;
+        textLayer.Visibility = Visibility.Hidden;
+        try { bitmap.Render(canvas); }
+        finally { textLayer.Visibility = Visibility.Visible; }
+        if (includeText) {
+            var export = new Canvas { Width = canvas.Width, Height = canvas.Height, ClipToBounds = true };
+            foreach (var text in texts) {
+                var label = text.CreateLabel(); label.RenderTransform = new RotateTransform(text.Angle);
+                Canvas.SetLeft(label, text.X); Canvas.SetTop(label, text.Y); export.Children.Add(label);
+            }
+            export.Measure(new Size(canvas.Width, canvas.Height)); export.Arrange(new Rect(0, 0, canvas.Width, canvas.Height)); export.UpdateLayout();
+            bitmap.Render(export);
+        }
+        bitmap.Freeze(); return bitmap;
     }
     void Commit(BitmapSource bitmap, BitmapSource? baseline = null)
     {
-        history.Commit(bitmap, baseline ?? history.Current.Baseline); Restore();
+        history.Commit(bitmap, baseline ?? history.Current.Baseline, texts.Where(t => !string.IsNullOrWhiteSpace(t.Text)).ToArray()); Restore();
     }
     internal void Undo()
     {
         if (Drawing) { CancelStroke(); return; }
+        CommitText();
         if (history.Undo()) { Restore(); status.Text = "已撤销"; }
     }
     internal void Redo()
     {
         if (Drawing) return;
+        CommitText();
         if (history.Redo()) { Restore(); status.Text = "已重做"; }
     }
     internal void Rotate()
     {
-        CancelStroke();
+        CancelStroke(); CommitText();
         var rotated = new TransformedBitmap(history.Current.Image, new RotateTransform(90)); rotated.Freeze();
         var baseline = new TransformedBitmap(history.Current.Baseline, new RotateTransform(90)); baseline.Freeze();
+        for (int i = 0; i < texts.Count; i++) texts[i] = texts[i].Rotate(canvas.Height);
         Commit(rotated, baseline);
     }
     Point Bounded(Point point) => new(Math.Clamp(point.X, 0, canvas.Width), Math.Clamp(point.Y, 0, canvas.Height));
@@ -106,9 +124,7 @@ public sealed partial class EditorWindow : Window
         var p = Bounded(point);
         if (tool == "文字")
         {
-            var text = AskText(); if (string.IsNullOrWhiteSpace(text)) return;
-            var label = new TextBlock { Text = text, FontFamily = Theme.Font, FontSize = Math.Max(18, canvas.Width / 35), Foreground = new SolidColorBrush(color) };
-            Canvas.SetLeft(label, p.X); Canvas.SetTop(label, p.Y); canvas.Children.Add(label); Commit(Flatten()); return;
+            AddText(p); return;
         }
         if (tool == "橡皮擦")
         {
@@ -170,13 +186,15 @@ public sealed partial class EditorWindow : Window
             if (!rect.IsEmpty && rect.Width >= 3 && rect.Height >= 3) {
                 var area = new Int32Rect((int)rect.X, (int)rect.Y, (int)rect.Width, (int)rect.Height);
                 var cropped = new CroppedBitmap(history.Current.Image, area); cropped.Freeze();
-                var baseline = new CroppedBitmap(history.Current.Baseline, area); baseline.Freeze(); Commit(cropped, baseline);
+                var baseline = new CroppedBitmap(history.Current.Baseline, area); baseline.Freeze();
+                for (int i = 0; i < texts.Count; i++) texts[i] = texts[i].Crop(area.X, area.Y);
+                Commit(cropped, baseline);
             } else Restore();
         }
         else if (active is Rectangle or Ellipse && (active.Width < .5 || active.Height < .5)) { ClearGesture(); Restore(); }
         else if (active is System.Windows.Shapes.Path path && (path.Data == null || path.Data.IsEmpty())) { ClearGesture(); Restore(); }
         else if (eraser == null && stroke == null && start is Point origin && (Bounded(point) - origin).Length < .5) { ClearGesture(); Restore(); }
-        else { var bitmap = Flatten(); ClearGesture(); Commit(bitmap); }
+        else { var bitmap = Flatten(false); ClearGesture(); Commit(bitmap); }
     }
     void ClearGesture() { start = null; active = null; stroke = null; eraser = null; }
     void CancelStroke()
@@ -186,14 +204,20 @@ public sealed partial class EditorWindow : Window
     }
     void OnKey(object sender, KeyEventArgs e)
     {
-        if (e.OriginalSource is TextBox) return;
+        if (e.OriginalSource is ComboBox || e.OriginalSource is System.Windows.Controls.Primitives.ToggleButton and not RadioButton) return;
+        if (e.OriginalSource is TextBox) {
+            if (e.Key == Key.S && Keyboard.Modifiers == ModifierKeys.Control) { Save(); e.Handled = true; }
+            else if (e.Key == Key.Escape && selectedText != null) { CommitText(); selectedText = null; RebuildTextViews(); viewport.Focus(); e.Handled = true; }
+            return;
+        }
         if (e.Key is Key.LeftShift or Key.RightShift && UpdateShapeConstraint(true)) { e.Handled = true; return; }
         if (e.Key == Key.Space && e.OriginalSource is System.Windows.Controls.Primitives.ButtonBase) return;
         var mods = Keyboard.Modifiers;
         if (e.Key == Key.Z && mods == ModifierKeys.Control) Undo();
         else if (e.Key == Key.Y && mods == ModifierKeys.Control || e.Key == Key.Z && mods == (ModifierKeys.Control | ModifierKeys.Shift)) Redo();
         else if (e.Key == Key.S && mods == ModifierKeys.Control) Save();
-        else if (e.Key == Key.Escape) { if (Drawing) CancelStroke(); else Close(); }
+        else if (e.Key == Key.Escape) { if (Drawing) CancelStroke(); else if (selectedText != null) { CommitText(); selectedText = null; RebuildTextViews(); } else Close(); }
+        else if (e.Key == Key.Delete && selectedText != null) DeleteText();
         else if (e.Key == Key.Space && mods == ModifierKeys.None) viewport.SpaceHeld = true;
         else if (Drawing) return;
         else if (e.Key is Key.Add or Key.OemPlus) viewport.ZoomBy(1.25);
@@ -208,23 +232,14 @@ public sealed partial class EditorWindow : Window
         else return;
         e.Handled = true;
     }
-    string? AskText()
-    {
-        var dialog = new Window { Title = "添加文字", Width = 440, SizeToContent = SizeToContent.Height, Owner = this, ResizeMode = ResizeMode.NoResize }; Theme.WindowStyle(dialog);
-        var panel = new StackPanel { Margin = new Thickness(24) }; panel.Children.Add(Theme.Text("添加文字", 22));
-        var box = new TextBox { Margin = new Thickness(0, 16, 0, 20), MinHeight = 90, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap }; panel.Children.Add(box);
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-        var cancel = Theme.Button("取消", () => dialog.DialogResult = false); cancel.IsCancel = true; actions.Children.Add(cancel); actions.Children.Add(Theme.Primary("添加文字", () => dialog.DialogResult = true)); panel.Children.Add(actions);
-        dialog.Content = panel; dialog.Loaded += (_, _) => box.Focus(); return dialog.ShowDialog() == true ? box.Text : null;
-    }
     async void Save()
     {
         if (saving) return;
-        CancelStroke();
+        CancelStroke(); CommitText();
         if (!history.IsDirty) { Close(); return; }
         saving = true; IsEnabled = false;
         try {
-            var bitmap = history.Current.Image;
+            var bitmap = Flatten();
             if (MediaTools.NeedsSeparateEdit(photo.Path)) {
                 var target = FileRules.UniquePath(Settings.Inbox, System.IO.Path.GetFileNameWithoutExtension(photo.Path) + " edited.png"); MediaTools.SavePng(bitmap, target); await app.Store.Add(target);
             } else { MediaTools.SavePng(bitmap, photo.Path); await app.Store.Reload(photo); }
