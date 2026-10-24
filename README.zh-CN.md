@@ -12,13 +12,16 @@
 
 ### 获取程序
 
-当前仓库公开的是源码，[Releases](https://github.com/shelter1995/tendedero/releases) 暂未提供 Windows 安装包或便携 ZIP。开发者可以按下文构建；如果你已经拿到编译好的程序包，可以按下面的方式使用。
+[晾图 0.7.2 Windows 版](https://github.com/shelter1995/tendedero/releases/tag/windows-v0.7.2) 已作为预发布版本提供下载。普通用户推荐安装版；希望免安装使用，可以选择便携 ZIP。发布页面同时提供两个文件各自的 `.sha256` 校验文件。
+
+- [下载 x64 安装包](https://github.com/shelter1995/tendedero/releases/download/windows-v0.7.2/Liangtu-0.7.2-Setup-x64-r1.exe)
+- [下载便携 ZIP](https://github.com/shelter1995/tendedero/releases/download/windows-v0.7.2/Liangtu-0.7.2-Windows-x64-portable.zip)
 
 晾图面向 Windows 10/11 x64，目前主要在 Windows 11 上验证。Windows 10 仍需进一步测试，尚未提供原生 ARM64 版本。实时玻璃效果使用 Windows 11 合成接口。自包含程序包已带 .NET 桌面运行时，普通用户无需另行安装。
 
 **便携 ZIP：** 将整个压缩包解压到文件夹，运行 `Start.cmd` 或 `Liangtu.exe`。请保留包内所有文件，包括 `GlassNative.dll`。
 
-**安装包：** 运行安装程序，按向导完成安装。程序安装到当前用户目录，不需要管理员权限。选装视频功能时会联网下载 FFmpeg；仅安装图片功能可以离线完成。目前构建产物尚未签名。
+**安装包：** 运行安装程序，按向导完成安装。程序安装到当前用户目录，不需要管理员权限。选装视频功能时会下载约 65 MB 的 FFmpeg 组件，优先使用南京大学镜像，失败后尝试官方来源，所有来源都使用同一固定 SHA-256 校验。仅安装图片功能可以离线完成。如需离线安装视频组件，将 `jellyfin-ffmpeg_8.1.3-1_portable_win64-clang-gpl.zip` 原样放在安装程序旁边，不要解压，详见[视频组件说明](https://github.com/shelter1995/tendedero/blob/windows-port/windows/installer/video-component-readme.txt)。目前构建产物尚未签名。
 
 ### 第一次使用
 
@@ -26,14 +29,14 @@
 2. 在托盘菜单中开启“接管截图”，接收 Windows 系统截图和录屏。`Win+Shift+S` 仍由 Windows 截图工具处理；晾图自己的框选截图快捷键是 `Ctrl+Alt+S`。
 3. 如需接收其他应用复制的图片，开启“挂上复制的图片”。这个选项默认关闭，会忽略文本、文件列表和常见的剪贴板隐私标记。
 
-两组全局快捷键都可以在托盘菜单中修改或清除。你还可以调整卡片大小、保留数量、额外监视的文件夹，以及是否在全屏应用上展开。
+两组全局快捷键都可以在托盘菜单中修改或清除。挂图、复制、取下和进入编辑时会播放简短提示音，可在托盘菜单关闭。你还可以调整卡片大小、保留数量、额外监视的文件夹，以及是否在全屏应用上展开。
 
 ### 常用操作
 
 | 操作 | 效果 |
 | --- | --- |
-| 单击截图 | 等待系统双击间隔后，复制原图 |
-| 双击 | 用默认应用打开 |
+| 单击截图 | 松开鼠标立即开始复制，图片写入剪贴板前显示“正在复制…” |
+| 双击 | 第一下复制，第二下用默认应用打开 |
 | 中键单击 | 快速预览 |
 | 长按 | 标注图片或裁剪视频 |
 | 拖进其他应用 | 向接收应用提供图片或文件 |
@@ -47,6 +50,8 @@
 ### 标注图片与裁剪视频
 
 图片编辑器提供画笔、荧光笔、箭头、形状、文字、裁剪、旋转和局部橡皮擦。按住 `Shift` 可以画正方形、正圆，或按 45 度间隔吸附直线方向。滚轮缩放，`Space` + 拖动或中键拖动平移，`F` 适应窗口，`Ctrl+1` 显示实际大小。查看时的缩放不会改变导出的像素尺寸。
+
+文字工具可以直接在图片中输入多段文字，调整字体、字号、颜色、粗体和斜体。选中已有文字后仍可修改样式，拖动移动柄可以调整位置。文字在当前编辑期间保持可编辑，保存时合并为图片像素，重新打开图片不会恢复文字对象。
 
 `Ctrl+Z` 撤销，`Ctrl+Y` 或 `Ctrl+Shift+Z` 重做，`Ctrl+S` 保存。普通图片保存时写回原文件；多帧图片和 WebP 的编辑结果会另存为收件箱中的 PNG。
 
@@ -64,7 +69,7 @@
 | `%LOCALAPPDATA%/Liangtu/settings.json` | 设置及晾衣绳上文件的路径 |
 | `%LOCALAPPDATA%/Liangtu/app.log` | 本地错误日志 |
 
-替换或升级程序前，请先保存编辑，再从托盘菜单退出。卸载安装版会保留用户数据；删除便携版程序文件夹也不会删除上述数据目录。开机自启由你自行选择。
+替换或升级程序前，请先保存编辑，再从托盘菜单退出。卸载时默认保留设置和收件箱图片，也可以明确选择删除。删除不可撤销，外部文件夹中的原图不受影响。已安装旧版的用户需要运行新安装包升级，才能更新卸载选项。删除便携版程序文件夹不会删除上述数据目录。开机自启由你自行选择。
 
 目前菜单中的“检查更新”打开的是上游 **macOS** 发布页面，不会更新这个 Windows 移植版。
 
@@ -115,7 +120,7 @@ pwsh -NoProfile -File ./scripts/test-video.ps1
 pwsh -NoProfile -File ./scripts/test-video-scrub.ps1 -SourceVideo ./artifacts/video-fixtures/source.mp4
 ```
 
-这些检查会在 `artifacts/` 下生成合成媒体，并可能显示测试窗口。`test.ps1`、`scripts/test-recording-intake.ps1` 和 `scripts/test-installer.ps1` 涉及桌面或安装行为，运行前请先阅读脚本。
+这些检查会在 `artifacts/` 下生成合成媒体，并可能显示测试窗口。`test.ps1`、`scripts/test-recording-intake.ps1` 和 `scripts/test-installer.ps1` 涉及桌面或安装行为，运行前请先阅读脚本。额外的卸载和下载回退测试需要隔离安装包与测试夹具；`scripts/test-installer-failover.ps1` 仍引用早期 0.6.3 测试夹具，不能直接用本次公开的 0.7.2 安装包替代。
 
 ### 打包
 
@@ -128,7 +133,7 @@ pwsh -NoProfile -File ./build.ps1
 如需生成安装包，先构建便携包，再将兼容的 Inno Setup 6 安装目录放到 `.tools/InnoSetup/`，确保该目录直接包含 `ISCC.exe`。安装脚本使用增强归档解压和下载页面 API。
 
 ```powershell
-pwsh -NoProfile -File ./scripts/package-installer.ps1 -Version 0.6.3
+pwsh -NoProfile -File ./scripts/package-installer.ps1 -Version 0.7.2
 ```
 
 版本参数必须与便携包一致。FFmpeg 下载地址、校验值和许可信息见 [`installer/video-component.json`](https://github.com/shelter1995/tendedero/blob/windows-port/windows/installer/video-component.json)。构建产物、下载工具、缓存和日志均不纳入 Git。
