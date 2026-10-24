@@ -1,3 +1,5 @@
+> This fork also contains [Liangtu (晾图), a community Windows port](windows/README.md) built with C#/.NET 8 and WPF. See that directory for source, build instructions, and testing limits. The original macOS project is below.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.png">
   <img src="docs/images/hero-light.png" alt="Tendedero. Screenshots, hung out to dry. Three screenshots in glass frames hang from a thin line under the macOS menu bar.">
