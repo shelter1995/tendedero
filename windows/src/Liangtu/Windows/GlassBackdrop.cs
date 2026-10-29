@@ -7,6 +7,11 @@ public sealed class GlassBackdrop : IDisposable
 {
     readonly Window owner; readonly IntPtr ownerHandle; readonly WndProc procedure;
     IntPtr handle, context; bool visible;
+    readonly List<Shape> shapeBuffer = new();
+    Shape[] previousShapes = Array.Empty<Shape>();
+    Rect previousBounds;
+    internal int NativeUpdateCount { get; private set; }
+    internal bool RenderingAttached { get; private set; }
     public bool Available => context != IntPtr.Zero;
     public int ErrorCode
     {
@@ -40,13 +45,39 @@ public sealed class GlassBackdrop : IDisposable
         if (handle == IntPtr.Zero)
             return;
         Native.SetWindowLongPtr(handle, -4, Marshal.GetFunctionPointerForDelegate(procedure));
+        RefreshMaterial();
+        Theme.Changed += RefreshMaterial;
+        owner.IsVisibleChanged += OwnerVisibilityChanged;
+        UpdateRendering();
+    }
+    void RefreshMaterial()
+    {
+        if (handle == IntPtr.Zero) return;
+        if (Theme.Current.Material != "canvas" || SystemParameters.HighContrast) {
+            Hide();
+            var retired = context; context = IntPtr.Zero;
+            previousShapes = Array.Empty<Shape>(); previousBounds = Rect.Empty;
+            if (retired != IntPtr.Zero) GlassDestroy(retired);
+            UpdateRendering();
+            return;
+        }
+        if (Available) { UpdateRendering(); return; }
         try
         {
             ErrorCode = GlassCreate(handle, out context);
         }
         catch (Exception e) { Settings.Log("Glass adapter " + e.Message); ErrorCode = e.HResult; }
         Settings.Log($"Composition backdrop available={Available}, HRESULT=0x{ErrorCode:X8}");
-        CompositionTarget.Rendering += Render;
+        UpdateRendering();
+    }
+    void OwnerVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e) => UpdateRendering();
+    void UpdateRendering()
+    {
+        var active = handle != IntPtr.Zero && Available && owner.IsVisible;
+        if (RenderingAttached == active) return;
+        RenderingAttached = active;
+        if (active) CompositionTarget.Rendering += Render;
+        else { CompositionTarget.Rendering -= Render; Hide(); }
     }
     void Render(object? sender, EventArgs e)
     {
@@ -56,8 +87,7 @@ public sealed class GlassBackdrop : IDisposable
             return;
         }
         Native.GetWindowRect(ownerHandle, out var bounds);
-        var shapes = new List<Shape>();
-        var outlines = new List<Point[]>();
+        var shapes = shapeBuffer; shapes.Clear();
         foreach (var g in GlassBorder.In(owner))
         {
             try
@@ -66,7 +96,6 @@ public sealed class GlassBackdrop : IDisposable
                 var px = g.PointToScreen(new Point(1, 0));
                 var py = g.PointToScreen(new Point(0, 1));
                 shapes.Add(new Shape { Width = (float)g.ActualWidth, Height = (float)g.ActualHeight, Radius = (float)Math.Min(g.CornerRadius.TopLeft, Math.Min(g.ActualWidth, g.ActualHeight) / 2), Opacity = 1, M11 = (float)(px.X - p.X), M12 = (float)(px.Y - p.Y), M21 = (float)(py.X - p.X), M22 = (float)(py.Y - p.Y), X = (float)(p.X - bounds.Left), Y = (float)(p.Y - bounds.Top) });
-                outlines.Add(g.ScreenOutline().Select(point => new Point(point.X - bounds.Left, point.Y - bounds.Top)).ToArray());
             }
             catch (InvalidOperationException) { }
         }
@@ -75,14 +104,18 @@ public sealed class GlassBackdrop : IDisposable
             Hide();
             return;
         }
-        var status = GlassUpdate(context, shapes.ToArray(), shapes.Count);
+        var rectangle = new Rect(bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
+        if (visible && rectangle == previousBounds && shapes.Count == previousShapes.Length && shapes.SequenceEqual(previousShapes)) return;
+        var updatedShapes = shapes.ToArray();
+        var status = GlassUpdate(context, updatedShapes, updatedShapes.Length);
         if (status < 0)
         {
             Settings.Log($"Glass update failed 0x{status:X8}");
             Hide();
             return;
         }
-        var region = BuildInputRegion(outlines);
+        // Only changed geometry needs the 40-point rounded outlines and GDI region.
+        var region = BuildInputRegion(shapes.Select(Outline));
         if (SetWindowRgn(handle, region, false) == 0)
         {
             Native.DeleteObject(region);
@@ -90,6 +123,7 @@ public sealed class GlassBackdrop : IDisposable
             return;
         }
         Native.SetWindowPos(handle, ownerHandle, bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top, 0x10 | 0x40);
+        previousShapes = updatedShapes; previousBounds = rectangle; NativeUpdateCount++;
         visible = true;
     }
     public void Hide()
@@ -99,6 +133,24 @@ public sealed class GlassBackdrop : IDisposable
             ShowWindow(handle, 0);
             visible = false;
         }
+    }
+    static readonly Point[] cornerArc = Enumerable.Range(0, 10).Select(i => new Point(Math.Cos(i * Math.PI / 18), Math.Sin(i * Math.PI / 18))).ToArray();
+    static Point[] Outline(Shape s)
+    {
+        var points = new Point[40];
+        // Use the affine transform already sampled for Windows Composition.
+        // Forty PointToScreen calls per border per frame used to repeat this work.
+        for (int corner = 0; corner < 4; corner++) for (int i = 0; i < 10; i++) {
+            var arc = cornerArc[i];
+            var (x, y) = corner switch {
+                0 => (s.Width - s.Radius + arc.Y * s.Radius, s.Radius - arc.X * s.Radius),
+                1 => (s.Width - s.Radius + arc.X * s.Radius, s.Height - s.Radius + arc.Y * s.Radius),
+                2 => (s.Radius - arc.Y * s.Radius, s.Height - s.Radius + arc.X * s.Radius),
+                _ => (s.Radius - arc.X * s.Radius, s.Radius - arc.Y * s.Radius)
+            };
+            points[corner * 10 + i] = new Point(s.X + x * s.M11 + y * s.M21, s.Y + x * s.M12 + y * s.M22);
+        }
+        return points;
     }
     internal static IntPtr BuildInputRegion(IEnumerable<Point[]> outlines)
     {
@@ -118,16 +170,21 @@ public sealed class GlassBackdrop : IDisposable
     internal static bool RegionContains(IntPtr region, int x, int y) => PtInRegion(region, x, y);
     public void Dispose()
     {
+        Theme.Changed -= RefreshMaterial;
+        owner.IsVisibleChanged -= OwnerVisibilityChanged;
         CompositionTarget.Rendering -= Render;
-        if (context != IntPtr.Zero)
+        RenderingAttached = false;
+        // Native queue shutdown pumps messages. Publish detached state before
+        // entering native cleanup so reentrant callbacks cannot reuse ownership.
+        var retiredContext = context; context = IntPtr.Zero;
+        var retiredHandle = handle; handle = IntPtr.Zero; visible = false;
+        if (retiredContext != IntPtr.Zero)
         {
-            GlassDestroy(context);
-            context = IntPtr.Zero;
+            GlassDestroy(retiredContext);
         }
-        if (handle != IntPtr.Zero)
+        if (retiredHandle != IntPtr.Zero)
         {
-            DestroyWindow(handle);
-            handle = IntPtr.Zero;
+            DestroyWindow(retiredHandle);
         }
     }
 }

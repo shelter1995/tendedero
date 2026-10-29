@@ -57,7 +57,15 @@ extern "C" __declspec(dllexport) HRESULT __cdecl GlassUpdate(void* raw,const Sha
 }
 extern "C" __declspec(dllexport) void __cdecl GlassDestroy(void* raw) noexcept {
  if(!raw)return;auto ctx=static_cast<Context*>(raw);
- try{ctx->target.Root(nullptr);ctx->target.Close();ctx->compositor.Close();}catch(...){}
+ try{
+  ctx->target.Root(nullptr);
+  ctx->root.Children().RemoveAll();
+  ctx->layers.clear();
+  ctx->backdrop.Close();ctx->backdrop=nullptr;
+  ctx->root.Close();ctx->root=nullptr;
+  ctx->target.Close();ctx->target=nullptr;
+  ctx->compositor.Close();ctx->compositor=nullptr;
+ }catch(...){}
  if(ctx->queue){
   try{
    auto shutdown=ctx->queue.ShutdownQueueAsync();

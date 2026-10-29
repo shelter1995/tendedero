@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "0.7.2"
+  #define AppVersion "0.9.4"
 #endif
 #ifndef PayloadDir
   #error PayloadDir is required
@@ -92,8 +92,8 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 
 [Files]
 Source: "{#PayloadDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Components: core
-Source: "{tmp}\ffmpeg-extracted\ffmpeg.exe"; DestDir: "{app}\tools"; Flags: external ignoreversion; ExternalSize: 92391424; Components: video
-Source: "{tmp}\ffmpeg-extracted\ffprobe.exe"; DestDir: "{app}\tools"; Flags: external ignoreversion; ExternalSize: 92167168; Components: video
+Source: "{tmp}\ffmpeg-extracted\ffmpeg.exe"; DestDir: "{app}\tools"; Flags: external ignoreversion; ExternalSize: 92391424; Components: video; Check: NeedsVideoFiles
+Source: "{tmp}\ffmpeg-extracted\ffprobe.exe"; DestDir: "{app}\tools"; Flags: external ignoreversion; ExternalSize: 92167168; Components: video; Check: NeedsVideoFiles
 Source: "licenses\FFmpeg-GPLv3.txt"; DestDir: "{app}\licenses\FFmpeg"; DestName: "LICENSE.txt"; Flags: ignoreversion; Components: video
 Source: "video-component-readme.txt"; DestDir: "{app}\licenses\FFmpeg"; DestName: "README.txt"; Flags: ignoreversion; Components: video
 
@@ -130,6 +130,18 @@ procedure InitializeWizard;
 begin
   DownloadPage := CreateDownloadPage('下载视频组件', '优先使用国内镜像，失败后自动切换官方源。所有来源均校验 SHA-256。', nil);
   DownloadPage.ShowBaseNameInsteadOfUrl := True;
+end;
+
+function KeepExistingVideo: Boolean;
+begin
+  Result := (ExpandConstant('{param:KEEPVIDEO|0}') = '1') and
+    FileExists(ExpandConstant('{app}\tools\ffmpeg.exe')) and
+    FileExists(ExpandConstant('{app}\tools\ffprobe.exe'));
+end;
+
+function NeedsVideoFiles: Boolean;
+begin
+  Result := not KeepExistingVideo;
 end;
 
 procedure DownloadVideoComponent(ArchivePath: String);
@@ -172,6 +184,11 @@ var
 begin
   Result := True;
   if (CurPageID <> wpReady) or not WizardIsComponentSelected('video') or VideoPrepared then exit;
+  if KeepExistingVideo then begin
+    Log('Application update: keeping existing FFmpeg and FFprobe without downloading.');
+    VideoPrepared := True;
+    exit;
+  end;
   DownloadPage.Clear;
   DownloadPage.Show;
   try

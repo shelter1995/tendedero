@@ -99,7 +99,7 @@ public sealed class FolderWatch : IDisposable
                     using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
                     {
                     }
-                    var existing = store.Items.FirstOrDefault(p => string.Equals(p.Path, path, StringComparison.OrdinalIgnoreCase));
+                    var existing = store.Collection.FirstOrDefault(p => string.Equals(p.Path, path, StringComparison.OrdinalIgnoreCase));
                     if (existing == null)
                         await store.Add(path, screenshot: settings.HandleScreenshots && ScreenshotFolders().Contains(Path.GetDirectoryName(path), StringComparer.OrdinalIgnoreCase));
                     else

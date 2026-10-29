@@ -25,3 +25,4 @@ try {
  Copy-Item -LiteralPath (Join-Path $data 'line-preview.png') -Destination 'artifacts/release-test/line-preview.png'
  Copy-Item -LiteralPath (Join-Path $data 'menu-preview.png') -Destination 'artifacts/release-test/menu-preview.png'
 } finally { Pop-Location }
+

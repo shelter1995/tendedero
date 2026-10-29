@@ -2,12 +2,14 @@ namespace Liangtu;
 
 internal static class ClipboardImage
 {
-    public static bool ShouldCapture(Settings settings, string owner) => settings.ClipboardImages ||
-        settings.HandleScreenshots && (owner.Equals("SnippingTool", StringComparison.OrdinalIgnoreCase) || owner.Equals("ScreenClippingHost", StringComparison.OrdinalIgnoreCase));
+    internal sealed record Snapshot(BitmapSource Image, byte[]? Png);
+    internal static bool IsWindowsScreenshotOwner(string owner) => owner.Equals("SnippingTool", StringComparison.OrdinalIgnoreCase) || owner.Equals("ScreenClippingHost", StringComparison.OrdinalIgnoreCase);
+    public static bool ShouldCapture(Settings settings, string owner) => settings.ClipboardImages || settings.HandleScreenshots && IsWindowsScreenshotOwner(owner);
 
     public static bool Excluded(IDataObject data) => new[] { "UnicodeText", "Text", "FileDrop", "ExcludeClipboardContentFromMonitorProcessing", "org.nspasteboard.ConcealedType", "org.nspasteboard.TransientType", "Liangtu.Internal" }.Any(f => data.GetDataPresent(f, false));
 
-    public static BitmapSource? Read(IDataObject data)
+    public static BitmapSource? Read(IDataObject data) => ReadSnapshot(data)?.Image;
+    internal static Snapshot? ReadSnapshot(IDataObject data)
     {
         foreach (var format in new[] { "PNG", "image/png" })
         {
@@ -21,13 +23,13 @@ internal static class ClipboardImage
                 var frame = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0];
                 if ((long)frame.PixelWidth * frame.PixelHeight > 80_000_000) return null;
                 frame.Freeze();
-                return frame;
+                return new Snapshot(frame, bytes);
             }
             catch (Exception e) when (e is IOException or FileFormatException or NotSupportedException or ArgumentException) { Settings.Log("Clipboard PNG " + e.Message); }
         }
         if (data.GetDataPresent(DataFormats.Dib, false) && data.GetData(DataFormats.Dib, false) is MemoryStream dib)
         {
-            try { return DecodeDib(dib.ToArray()); }
+            try { return new Snapshot(DecodeDib(dib.ToArray()), null); }
             catch (Exception e) when (e is IOException or ArgumentException or OverflowException or NotSupportedException) { Settings.Log("Clipboard DIB " + e.Message); }
         }
         // CF_BITMAP carries RGB data; its spare byte is not a PNG alpha channel.
@@ -36,7 +38,7 @@ internal static class ClipboardImage
         if ((long)bitmap.PixelWidth * bitmap.PixelHeight > 80_000_000) return null;
         var result = new FormatConvertedBitmap(bitmap, PixelFormats.Bgr32, null, 0);
         result.Freeze();
-        return result;
+        return new Snapshot(result, null);
     }
 
     public static BitmapSource DecodeDib(byte[] bytes)

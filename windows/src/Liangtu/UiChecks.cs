@@ -60,11 +60,12 @@ internal static class UiChecks
                         frame.RenderTransform = new ScaleTransform(1.035, 1.035);
                         cross.RenderTransform = new ScaleTransform(.8, .8);
                         card.Measure(new Size(250, 300)); card.Arrange(new Rect(0, 0, 250, 300));
-                        var center = cross.TranslatePoint(new Point(10, 10), frame);
-                        if (!HitSurface.Contains(cross, frame, center, 10))
+                        var radius = cross.ActualWidth / 2;
+                        var center = cross.TranslatePoint(new Point(radius, radius), frame);
+                        if (!HitSurface.Contains(cross, frame, center, radius))
                             throw new Exception($"Corner center missed at size={size}, tilt={tilt}");
-                        foreach (var local in new[] { new Point(0, 0), new Point(21, 10) }) {
-                            if (HitSurface.Contains(cross, frame, cross.TranslatePoint(local, frame), 10))
+                        foreach (var local in new[] { new Point(0, 0), new Point(cross.ActualWidth + 1, radius) }) {
+                            if (HitSurface.Contains(cross, frame, cross.TranslatePoint(local, frame), radius))
                                 throw new Exception("Outside/circular corner incorrectly accepted");
                         }
                         if (!HitSurface.Contains(frame, card, frame.TranslatePoint(new Point(frame.Width / 2, frame.Height / 2), card), 16))

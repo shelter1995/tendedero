@@ -9,3 +9,4 @@ try {
  if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }
  & (Join-Path $PSScriptRoot 'scripts/package-portable.ps1')
 } finally { Pop-Location }
+

@@ -4,16 +4,18 @@ internal static class MultiDisplayChecks
 {
     public static void Run(App app, LineWindow window, BitmapSource bitmap, Action<string, Action> test)
     {
+        // Geometry checks need an arranged offscreen surface; this does not show it.
+        window.PrepareSurface();
         var photo = new Photo { Path = Path.Combine(Settings.Root, "multi-display.png"), Image = bitmap };
         app.Store.Items.Add(photo); window.Refresh();
         var layer = (Canvas)window.Content; var line = layer.Children.OfType<Canvas>().Single(); var card = line.Children.OfType<Card>().Last();
         var group = (Grid)card.Children[0]; var frame = (Border)group.Children[0];
-        test("card animation resumes after repeated unload/load without duplicate subscriptions", () => {
+        test("card rendering subscriptions follow visibility across repeated unload/load", () => {
             for (int i = 0; i < 4; i++) {
                 card.RaiseEvent(new RoutedEventArgs(FrameworkElement.UnloadedEvent));
                 if (card.RenderingAttached) throw new Exception("Still attached while unloaded");
                 card.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent)); card.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent));
-                if (!card.RenderingAttached) throw new Exception("Animation never reattached on next reveal");
+                if (card.RenderingAttached != card.IsVisible) throw new Exception("Rendering subscription does not match visibility");
             }
         });
         test("rotated card corner outside the visible frame is click-through", () => {
@@ -34,7 +36,8 @@ internal static class MultiDisplayChecks
                 var slide = (TranslateTransform)line.RenderTransform; slide.BeginAnimation(TranslateTransform.YProperty, null); slide.Y = 0;
                 card.FollowRope(9.5);
                 ((TransformGroup)group.RenderTransform).Children.OfType<RotateTransform>().Single().Angle = 27;
-                ((ScaleTransform)frame.RenderTransform).ScaleX = ((ScaleTransform)frame.RenderTransform).ScaleY = 1.035;
+                var hoverScale = frame.RenderTransform is TransformGroup pictureTransforms ? pictureTransforms.Children.OfType<ScaleTransform>().First() : (ScaleTransform)frame.RenderTransform;
+                hoverScale.ScaleX = hoverScale.ScaleY = 1.035;
                 layer.Measure(new Size(window.Width, window.Height)); layer.Arrange(new Rect(0, 0, window.Width, window.Height)); layer.UpdateLayout();
                 var transform = frame.TransformToAncestor(layer);
                 var center = transform.Transform(new Point(frame.ActualWidth / 2, frame.ActualHeight / 2));
@@ -54,12 +57,12 @@ internal static class MultiDisplayChecks
         test("rope bounce repeats and every card follows the same parabola", () => {
             var rope = line.Children.OfType<Rope>().Single();
             for (int repeat = 0; repeat < 4; repeat++) {
-                var animation = window.StartRopeBounce(); animation.Controller!.SeekAlignedToLastTick(TimeSpan.FromSeconds(.14), System.Windows.Media.Animation.TimeSeekOrigin.BeginTime);
+                var animation = window.StartRopeBounce(); animation.Controller!.SeekAlignedToLastTick(TimeSpan.FromSeconds(.075), System.Windows.Media.Animation.TimeSeekOrigin.BeginTime);
                 window.UpdateRopeMotion(null, EventArgs.Empty);
-                var delta = ((TranslateTransform)card.RenderTransform).Y;
+                var delta = card.RopeOffset;
                 if (Math.Abs(rope.Deflection) < 1 || Math.Abs(delta - Rope.Offset(Canvas.GetLeft(card) + 125, window.Width, rope.Deflection)) > .001) throw new Exception("Card detached from rope motion");
                 animation.Controller.SeekAlignedToLastTick(TimeSpan.FromSeconds(1.3), System.Windows.Media.Animation.TimeSeekOrigin.BeginTime); window.UpdateRopeMotion(null, EventArgs.Empty);
-                if (Math.Abs(rope.Deflection) > .001 || Math.Abs(((TranslateTransform)card.RenderTransform).Y) > .001) throw new Exception("Bounce did not settle");
+                if (Math.Abs(rope.Deflection) > .001 || Math.Abs(card.RopeOffset) > .001) throw new Exception("Bounce did not settle");
             }
         });
         test("physical crop crosses monitor seam and preserves exact source pixels", () => {

@@ -8,6 +8,7 @@ public sealed partial class EditorWindow
     readonly Canvas textLayer = new() { ClipToBounds = false };
     readonly Dictionary<Guid, (Border frame, TextBox input, Border handle)> textViews = new();
     Guid? selectedText;
+    Guid? editingText;
     string textFont = "Microsoft YaHei UI";
     double textSize = 28;
     bool textBold, textItalic, updatingTextProperties;
@@ -83,7 +84,7 @@ public sealed partial class EditorWindow
         int index = texts.FindIndex(t => t.Id == selectedText);
         if (index >= 0) {
             texts[index] = texts[index] with { FontFamily = textFont, FontSize = textSize, Color = color, Bold = bold, Italic = italic };
-            ApplyTextView(texts[index]); CommitText();
+        ApplyTextView(texts[index]); CommitText(); UpdateSelectionView();
         }
         SyncTextProperties();
         app.Settings.TextFontFamily = textFont; app.Settings.TextFontSize = textSize; app.Settings.TextBold = bold; app.Settings.TextItalic = italic;
@@ -94,49 +95,45 @@ public sealed partial class EditorWindow
         CommitText();
         texts.RemoveAll(t => string.IsNullOrWhiteSpace(t.Text));
         var text = new TextAnnotation(Guid.NewGuid(), "", Math.Min(position.X, Math.Max(0, canvas.Width - 72)), Math.Min(position.Y, Math.Max(0, canvas.Height - textSize - 8)), textFont, textSize, color, textBold, textItalic);
-        texts.Add(text); selectedText = text.Id; RebuildTextViews();
+        texts.Add(text); selectedShape = null; selectedText = editingText = text.Id; RebuildTextViews(); UpdateSelectionView();
         var input = textViews[text.Id].input;
         // Newly inserted WPF controls become focusable only after layout/load.
         Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() => {
             if (selectedText == text.Id && tool == "文字" && IsVisible) { input.Focus(); Keyboard.Focus(input); }
         }));
-        status.Text = "直接输入 · Enter 换行 · 拖动左侧移动柄 · Esc 完成编辑";
+        status.Text = "直接输入 · Enter 换行 · Esc 完成输入后可拖动 / 缩放 / 旋转";
     }
     internal void SelectText(Guid id)
     {
         if (!texts.Any(t => t.Id == id)) return;
         if (selectedText != id) CommitText();
-        selectedText = id;
+        selectedText = editingText = id; selectedShape = null;
         var text = texts.Single(t => t.Id == id);
-        textFont = text.FontFamily; textSize = text.FontSize; color = text.Color; textBold = text.Bold; textItalic = text.Italic;
-        foreach (var item in texts) ApplyTextView(item);
-        SyncTextProperties();
+        ReadTextStyle(text); RebuildTextViews(); UpdateSelectionView();
+        var input = textViews[id].input;
+        if (IsVisible) { input.Focus(); Keyboard.Focus(input); input.CaretIndex = input.Text.Length; }
     }
+    void ReadTextStyle(TextAnnotation text) { textFont = text.FontFamily; textSize = text.FontSize; color = text.Color; textBold = text.Bold; textItalic = text.Italic; }
     internal void CommitText()
     {
         var meaningful = texts.Where(t => !string.IsNullOrWhiteSpace(t.Text)).ToArray();
         if (!meaningful.SequenceEqual(history.Current.Texts))
-            history.Commit(history.Current.Image, history.Current.Baseline, meaningful);
+            history.Commit(history.Current.Image, history.Current.Baseline, meaningful, shapes);
         undoButton.IsEnabled = history.CanUndo; redoButton.IsEnabled = history.CanRedo;
     }
     internal void MoveTextTo(Point position, bool commit = true)
     {
         int index = texts.FindIndex(t => t.Id == selectedText);
         if (index < 0) return;
-        var label = texts[index].CreateLabel(); label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        var bounds = new RotateTransform(texts[index].Angle).TransformBounds(new Rect(label.DesiredSize));
-        texts[index] = texts[index] with {
-            X = Math.Clamp(position.X, 8 - bounds.Right, canvas.Width - 8 - bounds.Left),
-            Y = Math.Clamp(position.Y, 8 - bounds.Bottom, canvas.Height - 8 - bounds.Top)
-        };
+        texts[index] = AnnotationTextEditor.ClampPosition(texts[index],position,new Size(canvas.Width,canvas.Height));
         ApplyTextView(texts[index]);
         if (commit) CommitText();
     }
     internal void DeleteText()
     {
         if (selectedText == null) return;
-        CommitText(); texts.RemoveAll(t => t.Id == selectedText); selectedText = null;
-        CommitText(); RebuildTextViews(); viewport.Focus();
+        CommitText(); texts.RemoveAll(t => t.Id == selectedText); selectedText = editingText = null;
+        CommitText(); RebuildTextViews(); UpdateSelectionView(); viewport.Focus();
     }
     void RebuildTextViews()
     {
@@ -144,36 +141,31 @@ public sealed partial class EditorWindow
         textLayer.Width = canvas.Width; textLayer.Height = canvas.Height;
         Panel.SetZIndex(textLayer, 100);
         if (!canvas.Children.Contains(textLayer)) canvas.Children.Add(textLayer);
-        textLayer.IsHitTestVisible = tool == "文字";
-        if (textProperties != null) textProperties.Visibility = tool == "文字" ? Visibility.Visible : Visibility.Collapsed;
-        if (brushProperties != null) brushProperties.Visibility = tool == "文字" ? Visibility.Collapsed : Visibility.Visible;
+        textLayer.IsHitTestVisible = editingText != null;
+        if (textProperties != null) textProperties.Visibility = tool == "文字" || selectedText != null ? Visibility.Visible : Visibility.Collapsed;
+        if (brushProperties != null) brushProperties.Visibility = tool == "文字" || selectedText != null ? Visibility.Collapsed : Visibility.Visible;
         foreach (var text in texts.ToArray()) {
             var id = text.Id;
-            var input = new TextBox { Text = text.Text, AcceptsReturn = true, AcceptsTab = false, TextWrapping = TextWrapping.NoWrap,
-                Background = Brushes.Transparent, BorderThickness = new Thickness(0), Padding = new Thickness(0), MinWidth = 64,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Hidden, HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden };
-            System.Windows.Automation.AutomationProperties.SetName(input, "图片内文字");
-            TextOptions.SetTextFormattingMode(input, TextFormattingMode.Ideal);
-            var frame = new Border { Child = input, Background = Brushes.Transparent, BorderThickness = new Thickness(1), Padding = new Thickness(3), UseLayoutRounding = false, SnapsToDevicePixels = false };
-            var handle = new Border { Width = 20, Height = 22, Background = Theme.ControlSurface, BorderBrush = Theme.Accent, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(3),
-                Cursor = Cursors.SizeAll, ToolTip = "拖动调整文字位置", Child = new TextBlock { Text = "✥", Foreground = Theme.Ink, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
+            // Annotation content must use native text layout, not the window's
+            // material input chrome (whose template may add its own border).
+            var editor = new AnnotationTextEditor(text,"图片内文字"); var input=editor.Input; var frame=editor.Frame; var handle=editor.Handle;
             textViews[id] = (frame, input, handle); textLayer.Children.Add(frame); textLayer.Children.Add(handle);
             input.TextChanged += (_, _) => {
                 var index = texts.FindIndex(t => t.Id == id);
                 if (index >= 0) texts[index] = texts[index] with { Text = input.Text };
             };
-            input.LostKeyboardFocus += (_, _) => CommitText();
+            input.LostKeyboardFocus += (_, _) => { if (selectionStart == null) CommitText(); };
             frame.PreviewMouseLeftButtonDown += (_, e) => {
                 if (viewport.SpaceHeld || viewport.PanMode) return;
                 if (selectedText != id) { SelectText(id); input.Focus(); input.CaretIndex = input.Text.Length; e.Handled = true; }
             };
             // A text click must never bubble into the canvas's new-text gesture.
             frame.MouseLeftButtonDown += (_, e) => e.Handled = true;
-            Point? dragStart = null; TextAnnotation? before = null;
-            handle.MouseLeftButtonDown += (_, e) => { SelectText(id); CommitText(); before = texts.Single(t => t.Id == id); dragStart = e.GetPosition(canvas); handle.CaptureMouse(); e.Handled = true; };
-            handle.MouseMove += (_, e) => { if (dragStart is Point start && before != null) { var delta = e.GetPosition(canvas) - start; MoveTextTo(new Point(before.X + delta.X, before.Y + delta.Y), false); e.Handled = true; } };
-            handle.MouseLeftButtonUp += (_, e) => { if (dragStart != null) { dragStart = null; CommitText(); handle.ReleaseMouseCapture(); viewport.Focus(); e.Handled = true; } };
-            handle.LostMouseCapture += (_, _) => { if (dragStart != null && before != null) { dragStart = null; var index = texts.FindIndex(t => t.Id == id); if (index >= 0) { texts[index] = before; ApplyTextView(before); } } };
+            handle.MouseLeftButtonDown += (_, e) => {
+                if (viewport.SpaceHeld || viewport.PanMode) return;
+                CommitText(); editingText = null; RebuildTextViews(); StartTransform(e.GetPosition(canvas), null); UpdateSelectionView();
+                viewport.Focus(); canvas.CaptureMouse(); e.Handled = true;
+            };
             ApplyTextView(text);
         }
         SyncTextProperties();
@@ -181,22 +173,6 @@ public sealed partial class EditorWindow
     void ApplyTextView(TextAnnotation text)
     {
         if (!textViews.TryGetValue(text.Id, out var view)) return;
-        bool selected = selectedText == text.Id && tool == "文字";
-        view.frame.BorderBrush = selected ? Theme.Accent : Brushes.Transparent;
-        view.frame.RenderTransform = new RotateTransform(text.Angle);
-        Canvas.SetLeft(view.frame, text.X); Canvas.SetTop(view.frame, text.Y);
-        var zoom = Math.Max(.05, viewport.Zoom);
-        view.handle.RenderTransform = new ScaleTransform(1 / zoom, 1 / zoom);
-        view.handle.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
-        view.input.IsReadOnly = !selected; view.input.IsHitTestVisible = selected;
-        view.input.FontFamily = new FontFamily(text.FontFamily); view.input.FontSize = text.FontSize;
-        view.input.FontWeight = text.Bold ? FontWeights.Bold : FontWeights.Normal;
-        view.input.FontStyle = text.Italic ? FontStyles.Italic : FontStyles.Normal;
-        view.input.Foreground = new SolidColorBrush(text.Color); view.input.CaretBrush = new SolidColorBrush(text.Color);
-        TextOptions.SetTextRenderingMode(view.input, TextRenderingMode.Grayscale);
-        var label = text.CreateLabel(); label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        var bounds = new RotateTransform(text.Angle).TransformBounds(new Rect(label.DesiredSize));
-        Canvas.SetLeft(view.handle, Math.Clamp(text.X + bounds.Left - 22 / zoom, 0, Math.Max(0, canvas.Width - 20 / zoom)));
-        Canvas.SetTop(view.handle, Math.Clamp(text.Y + bounds.Top, 0, Math.Max(0, canvas.Height - 22 / zoom)));
+        AnnotationTextEditor.Apply((TextSelectionFrame)view.frame,view.input,view.handle,text,viewport.Zoom,new Size(canvas.Width,canvas.Height),editingText==text.Id);
     }
 }

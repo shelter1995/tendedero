@@ -47,7 +47,7 @@ public sealed class VideoTimeline : Canvas
         border.SetValue(Border.BorderBrushProperty, Theme.ControlSurface);
         border.SetValue(Border.BorderThicknessProperty, new Thickness(handle ? 1 : 0));
         if (!handle) { border.SetValue(FrameworkElement.WidthProperty, Selection ? 2.0 : 12.0); border.SetValue(FrameworkElement.HeightProperty, Selection ? 60.0 : 12.0); border.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center); border.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center); }
-        else { var grip = new FrameworkElementFactory(typeof(TextBlock)); grip.SetValue(TextBlock.TextProperty, "Ⅱ"); grip.SetValue(TextBlock.FontSizeProperty, 12.0); grip.SetValue(TextBlock.ForegroundProperty, Theme.Dark ? Theme.Brush("#202124") : Brushes.White); grip.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center); grip.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center); border.AppendChild(grip); }
+        else { var grip = new FrameworkElementFactory(typeof(TextBlock)); grip.SetValue(TextBlock.TextProperty, "Ⅱ"); grip.SetValue(TextBlock.FontSizeProperty, 12.0); grip.SetValue(TextBlock.ForegroundProperty, Theme.Token("OnAccent")); grip.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center); grip.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center); border.AppendChild(grip); }
         var template = new ControlTemplate(typeof(Thumb)) { VisualTree = border };
         var hover = new Trigger { Property = IsMouseOverProperty, Value = true }; hover.Setters.Add(new Setter(OpacityProperty, .78, "Grip")); template.Triggers.Add(hover);
         var focus = new Trigger { Property = IsKeyboardFocusedProperty, Value = true }; focus.Setters.Add(new Setter(Border.BorderBrushProperty, Theme.Ink, "Grip")); focus.Setters.Add(new Setter(Border.BorderThicknessProperty, new Thickness(2), "Grip")); template.Triggers.Add(focus);
@@ -94,7 +94,7 @@ public sealed class VideoTimeline : Canvas
             dc.DrawRoundedRectangle(outline.Brush, null, new Rect(Inset, 15, TrackWidth, 3), 1.5, 1.5);
             dc.DrawRoundedRectangle(accent.Brush, null, new Rect(Inset, 15, Math.Max(0, X(position) - Inset), 3), 1.5, 1.5); return;
         }
-        if (background == null) { background = new DrawingGroup(); using (var cached = background.Open()) DrawBackground(cached); background.Freeze(); }
+        if (background == null) { background = new DrawingGroup(); using (var cached = background.Open()) DrawBackground(cached); if (background.CanFreeze) background.Freeze(); }
         dc.DrawDrawing(background);
         dc.DrawRectangle(shade, null, new Rect(Inset, 16, Math.Max(0, X(range.Start) - Inset), 52));
         dc.DrawRectangle(shade, null, new Rect(X(range.End), 16, Math.Max(0, ActualWidth - Inset - X(range.End)), 52));

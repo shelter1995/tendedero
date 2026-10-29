@@ -25,6 +25,8 @@ Copy-Item -LiteralPath (Join-Path $projectRoot 'README.md') -Destination (Join-P
 $launch="@echo off`r`nstart `"`" /D `"%~dp0`" `"%~dp0Liangtu.exe`" --show`r`n"
 [IO.File]::WriteAllText((Join-Path $output 'Start.cmd'),$launch,[Text.Encoding]::ASCII)
 $manifest=[ordered]@{}
+$updateInfo=[ordered]@{schemaVersion=1;product='Liangtu';version=[string]$version;runtime='win-x64';kind='portable'}
+[IO.File]::WriteAllText((Join-Path $output 'update-info.json'),($updateInfo|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
 Get-ChildItem -LiteralPath $output -File -Recurse | Where-Object {$_.Name -ne 'SHA256SUMS.json'} | Sort-Object FullName | ForEach-Object {
  $relative=[IO.Path]::GetRelativePath($output,$_.FullName)
  $manifest[$relative]=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash

@@ -100,3 +100,5 @@ public sealed class ReturnFlight : Window
     internal static Rect Interpolate(Rect from, Rect to, double amount) => new(from.X + (to.X - from.X) * amount, from.Y + (to.Y - from.Y) * amount, from.Width + (to.Width - from.Width) * amount, from.Height + (to.Height - from.Height) * amount);
     void Place(Rect rect) => Native.SetWindowPos(new System.Windows.Interop.WindowInteropHelper(this).Handle, new IntPtr(-1), (int)Math.Round(rect.X), (int)Math.Round(rect.Y), Math.Max(1, (int)Math.Round(rect.Width)), Math.Max(1, (int)Math.Round(rect.Height)), 0x10);
 }
+
+

@@ -77,11 +77,12 @@ public sealed class DisplayGeometry
     }
 
     /// <summary>The hover target keeps a physical-pixel thickness at every DPI.</summary>
-    public bool ContainsTopEdge(Point point, int thicknessPixels = 4)
+    public bool ContainsTopEdge(Point point, int thicknessPixels = 4) => ContainsTopEdge(PhysicalBounds, point, thicknessPixels);
+    public static bool ContainsTopEdge(Rectangle bounds, Point point, int thicknessPixels = 4)
     {
         if (thicknessPixels < 0)
             throw new ArgumentOutOfRangeException(nameof(thicknessPixels));
-        return PhysicalBounds.Contains(point) && (long)point.Y - PhysicalBounds.Top < thicknessPixels;
+        return bounds.Contains(point) && (long)point.Y - bounds.Top < thicknessPixels;
     }
 
     /// <summary>The visible panel's hit band has a local-DIP height.</summary>

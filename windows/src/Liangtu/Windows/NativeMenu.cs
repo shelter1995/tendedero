@@ -6,24 +6,25 @@ namespace Liangtu;
 /// Uses an actual HMENU: Windows owns typography, checkmarks, submenus and input.
 internal static class NativeMenu
 {
-    public static void Show(ContextMenu model, LineWindow line)
+    public static void Show(ContextMenu model, Window host)
     {
         var commands = new Dictionary<uint, MenuItem>();
         var menu = Build(model.Items, commands);
         uint selected = 0;
         Native.GetCursorPos(out var point);
         using var owner = new HwndSource(new HwndSourceParameters("Liangtu menu owner") { WindowStyle = unchecked((int)0x80000000), ExtendedWindowStyle = 0x80, PositionX = point.X, PositionY = point.Y, Width = 1, Height = 1 });
-        line.MenuOpen = true;
+        var line = host as LineWindow;
+        if (line != null) line.MenuOpen = true;
         try
         {
             SetForegroundWindow(owner.Handle);
             selected = TrackPopupMenu(menu, 0x100 | 0x80 | 0x2, point.X, point.Y, 0, owner.Handle, IntPtr.Zero);
             PostMessage(owner.Handle, 0, IntPtr.Zero, IntPtr.Zero);
         }
-        finally { line.MenuOpen = false; DestroyMenu(menu); }
+        finally { if (line != null) line.MenuOpen = false; DestroyMenu(menu); }
         // Dispatch only after the native tracking loop releases mouse capture.
         if (commands.TryGetValue(selected, out var item))
-            line.Dispatcher.BeginInvoke(() => item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent, item)));
+            host.Dispatcher.BeginInvoke(() => item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent, item)));
     }
     internal static IntPtr Build(ItemCollection items, Dictionary<uint, MenuItem> commands)
     {

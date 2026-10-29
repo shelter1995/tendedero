@@ -45,6 +45,7 @@ public static class VideoScrubChecks
                 window.Playback.EndScrub();
                 log.Add((Math.Abs(window.Playback.Media.Position.TotalSeconds - latest) < .001 ? "PASS" : "FAIL") + " releasing drag applies final position immediately");
                 window.Playback.BeginScrub(); window.Playback.Seek(5); window.Playback.Seek(6); await Task.Delay(120);
+                log.Add($"Sustained drag at 120ms: requested={window.Playback.Position:F6}s, native={window.Playback.Media.Position.TotalSeconds:F6}s");
                 log.Add((Math.Abs(window.Playback.Media.Position.TotalSeconds - 6) < .001 ? "PASS" : "FAIL") + " sustained drag decodes latest pending position");
                 window.Playback.EndScrub();
             }

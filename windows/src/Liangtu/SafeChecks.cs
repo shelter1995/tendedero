@@ -32,6 +32,8 @@ public static class SafeChecks
                     throw new InvalidOperationException("Assertion failed");
             }
             ClipboardChecks.Run(Test);
+            FullscreenChecks.Run(Test);
+            GameModeChecks.Run(Test);
             EditorChecks.Run(Test);
             log.AddRange(await ClipboardWriteChecks.Run());
             Test("native glass input region excludes desktop and gaps", () =>
@@ -94,6 +96,8 @@ public static class SafeChecks
             Test("original eleven language resources load", () => { Assert(Localization.LanguageCount == 11); Assert(Localization.Text("Copied", "en") == "Copied"); Assert(Localization.Text("Copied", "zh-CN") == "已复制"); Assert(Localization.Text("Copied", "fr") != "Copied"); });
             Test("formal hidden window is capturable and compositor initializes", () =>
             {
+                var previousTheme = Theme.SelectedId;
+                Theme.Select("sky");
                 typeof(App).GetProperty(nameof(App.Settings))!.SetValue(app, new Settings());
                 typeof(App).GetProperty(nameof(App.Store))!.SetValue(app, new Store(app.Settings));
                 var line = new LineWindow(app);
@@ -107,7 +111,7 @@ public static class SafeChecks
                     LineMotionChecks.Run(app, line, testBitmap, Test);
                     MultiDisplayChecks.Run(app, line, testBitmap, Test);
                 }
-                finally { line.Close(); }
+                finally { line.Close(); Theme.Select(previousTheme); }
             });
             Test("second-instance activation reaches first instance", () =>
             {
@@ -118,6 +122,8 @@ public static class SafeChecks
                 Assert(first.IsFirst && !second.IsFirst && signaled.Wait(1000));
             });
             UiChecks.Run(app, Test);
+            FullscreenChecks.RunUi(app, Test);
+            await GameModeChecks.RunUi(app, Test);
             SoundChecks.Run(Test);
             ToolbarChecks.Run(app, Test);
             var captureSettings = new Settings { Keep = 100 };
@@ -139,3 +145,4 @@ public static class SafeChecks
         return app.Run();
     }
 }
+

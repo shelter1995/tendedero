@@ -98,8 +98,9 @@ public static class MediaTools
         b.Freeze();
         return b;
     }
-    public static async Task Trim(string path, double start, double end)
+    public static async Task Trim(string path, double start, double end, System.Threading.CancellationToken cancel = default)
     {
+        cancel.ThrowIfCancellationRequested();
         if (Ffmpeg == null)
             throw new InvalidOperationException("未找到 ffmpeg.exe。请将其放入程序 tools 文件夹。");
         var temp = Path.Combine(Path.GetDirectoryName(path)!, ".trimming-" + Guid.NewGuid() + Path.GetExtension(path));
@@ -110,11 +111,13 @@ public static class MediaTools
         {
             using var p = Process.Start(psi)!;
             var error = p.StandardError.ReadToEndAsync();
-            await p.WaitForExitAsync();
+            try { await p.WaitForExitAsync(cancel); }
+            catch { try { if (!p.HasExited) p.Kill(true); } catch { } await p.WaitForExitAsync(); await error; throw; }
             if (p.ExitCode != 0 || !File.Exists(temp) || new FileInfo(temp).Length == 0)
                 throw new IOException(await error);
-            File.Move(temp, path, true);
+            cancel.ThrowIfCancellationRequested(); File.Move(temp, path, true);
         }
         finally { if (File.Exists(temp)) File.Delete(temp); }
     }
 }
+

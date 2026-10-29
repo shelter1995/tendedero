@@ -25,15 +25,14 @@ public sealed partial class App
         m.Items.Add(Item("复制", async () => { try { await Store.Copy(p); } catch { } }));
         m.Items.Add(Item("打开", () => Open(p)));
         m.Items.Add(Item("快速查看", () => Preview(p)));
-        if (!p.Video)
-            m.Items.Add(Item("标记", () => Edit(p)));
+        m.Items.Add(Item(p.Video ? "视频裁剪" : "图片标注", () => Edit(p)));
+        if (!p.Video) m.Items.Add(Item("钉在桌面", () => Pin(p), enabled: !Settings.GameDoNotDisturb));
         m.Items.Add(Item("在资源管理器中显示", () => Theme.RevealFile(p.Path)));
-        if (p.InInbox)
-            m.Items.Add(Item("存储到桌面", () => Store.SaveDesktop(p)));
+        m.Items.Add(Item("保存副本…", () => SaveCopy(p)));
         m.Items.Add(new Separator());
-        m.Items.Add(Item(p.InInbox ? "丢弃" : "取下", () => Store.Discard(p)));
-        if (!p.InInbox)
-            m.Items.Add(Item("移到回收站", () => Store.Discard(p, true)));
+        if (Store.Items.Contains(p)) m.Items.Add(Item("取下放篮子", () => Store.TakeDown(p)));
+        else m.Items.Add(Item("挂回晾衣绳", () => ReturnToLine(p)));
+        m.Items.Add(Item(Settings.ConfirmBeforeDelete ? "移到回收站…" : "移到回收站", () => DeletePhoto(p)));
         var index = Store.Items.IndexOf(p);
         m.Items.Add(Item("取下左侧全部", () => { _ = Store.TakeDownSide(p, true); }, enabled: index > 0));
         m.Items.Add(Item("取下右侧全部", () => { _ = Store.TakeDownSide(p, false); }, enabled: index < Store.Items.Count - 1));
@@ -42,15 +41,18 @@ public sealed partial class App
     public ContextMenu CreateTrayMenu()
     {
         var m = Menu();
-        m.Items.Add(Item(Line.Revealed ? "隐藏晾衣绳" : "显示晾衣绳", Line.Toggle));
-        m.Items.Add(Item("全部取下", () => { _ = Store.Clear(); }, enabled: Store.Items.Count > 0));
+        m.Items.Add(Item("游戏勿扰模式", () => SetGameDoNotDisturb(!Settings.GameDoNotDisturb), Settings.GameDoNotDisturb));
+        m.Items.Add(Item("图片篮子…", ShowBasket));
+        m.Items.Add(Item(Line.Revealed ? "隐藏晾衣绳" : Settings.GameDoNotDisturb ? "显示晾衣绳（勿扰中仅限快捷键）" : "显示晾衣绳", Line.Toggle, enabled: !Settings.GameDoNotDisturb || Line.Revealed));
+        m.Items.Add(Item("全部取下放篮子", () => { _ = Store.Clear(); }, enabled: Store.Items.Count > 0));
+        m.Items.Add(Item("自动挂上新截图", () => { Settings.AutoHang = !Settings.AutoHang; SaveSettings(); }, Settings.AutoHang));
         m.Items.Add(new Separator());
         m.Items.Add(Item("接管截图", () => { Settings.HandleScreenshots = !Settings.HandleScreenshots; SaveSettings(true); }, Settings.HandleScreenshots));
         m.Items.Add(Item("挂上复制的图片", () => { Settings.ClipboardImages = !Settings.ClipboardImages; SaveSettings(); }, Settings.ClipboardImages));
         var bring = Sub("放下晾衣绳");
-        bring.Items.Add(Item("指针停在屏幕顶边时", () => { Settings.HoverReveal = !Settings.HoverReveal; SaveSettings(); }, Settings.HoverReveal));
-        bring.Items.Add(Item("有新内容挂上时", () => { Settings.NewReveal = !Settings.NewReveal; SaveSettings(); }, Settings.NewReveal));
-        bring.Items.Add(Item("在全屏 App 上", () => { Settings.OverFullscreen = !Settings.OverFullscreen; SaveSettings(); }, Settings.OverFullscreen));
+        bring.Items.Add(Item("指针停在屏幕顶边时", () => { Settings.HoverReveal = !Settings.HoverReveal; SaveSettings(); }, Settings.HoverReveal, !Settings.GameDoNotDisturb));
+        bring.Items.Add(Item("有新内容挂上时", () => { Settings.NewReveal = !Settings.NewReveal; SaveSettings(); }, Settings.NewReveal, !Settings.GameDoNotDisturb));
+        bring.Items.Add(Item("允许在全屏应用上自动弹出（含游戏）", () => { Settings.OverFullscreen = !Settings.OverFullscreen; SaveSettings(); }, Settings.OverFullscreen, !Settings.GameDoNotDisturb));
         m.Items.Add(bring);
         var folders = Sub("同时监视文件夹");
         foreach (var folder in Settings.ExtraFolders)
@@ -77,12 +79,14 @@ public sealed partial class App
         shortcut.Items.Add(Item("框选截图 · " + ShortcutText(true), () => ChangeShortcut(true)));
         m.Items.Add(shortcut);
         m.Items.Add(Item("打开截图文件夹", () => Theme.Shell(Settings.Inbox)));
-        m.Items.Add(Item("框选截图", Capture));
+        m.Items.Add(Item("框选截图", Capture, enabled: PresentationPolicy.CanCapture(Settings)));
         m.Items.Add(new Separator());
-        m.Items.Add(Item("声音", () => { Settings.Sounds = !Settings.Sounds; if (!Settings.Sounds) sounds.Stop(); SaveSettings(); }, Settings.Sounds));
+        m.Items.Add(Item(Settings.GameDoNotDisturb ? "声音（勿扰中暂停）" : "声音", () => { Settings.Sounds = !Settings.Sounds; if (!Settings.Sounds) sounds.Stop(); SaveSettings(); }, Settings.Sounds, !Settings.GameDoNotDisturb));
+        m.Items.Add(Item("删除前确认", () => { Settings.ConfirmBeforeDelete = !Settings.ConfirmBeforeDelete; SaveSettings(); }, Settings.ConfirmBeforeDelete));
         m.Items.Add(Item("登录时打开", ToggleLogin, IsLogin()));
-        var updates = Item(Localization.Text("Check for Updates…"), () => Theme.Shell("https://github.com/alejandrobujan/tendedero/releases"));
-        updates.ToolTip = "查看上游 macOS 项目的发布记录；本 Windows 移植版通过本地构建更新。";
+        m.Items.Add(Item("外观主题…", ShowThemes));
+        var updates = Item("Windows 更新与升级…", ShowUpdates);
+        updates.ToolTip = "检查晾图 Windows 版本，或导入本地升级包。";
         m.Items.Add(updates);
         m.Items.Add(Item("关于晾图 / 版本说明", ShowAbout));
         m.Items.Add(new Separator());
@@ -120,3 +124,8 @@ static class FlagsExtension
 {
     public static bool HasFlagValue(this uint value, uint flag) => (value & flag) != 0;
 }
+
+
+
+
+

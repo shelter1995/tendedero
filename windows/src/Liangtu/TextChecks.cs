@@ -103,7 +103,9 @@ internal static class TextChecks
                 } finally { Clean(editor); }
             }
         });
-        test("text preview and export share exactly the same multiline layout", () => {
+        foreach (var profile in ThemeProfiles.All)
+        test("text preview and export share exactly the same multiline layout: " + profile.Id, () => {
+            var previousTheme = Theme.SelectedId; Theme.Select(profile.Id);
             var editor = new EditorWindow(app, photo);
             try {
                 editor.SelectTool("文字"); editor.ChangeTextStyle("Microsoft YaHei UI", 28, Colors.Black, false, false);
@@ -113,7 +115,18 @@ internal static class TextChecks
                 frame.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity)); frame.Arrange(new Rect(frame.DesiredSize));
                 label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity)); label.Arrange(new Rect(label.DesiredSize));
                 Assert(Math.Abs(frame.DesiredSize.Width - label.DesiredSize.Width) < .01 && Math.Abs(frame.DesiredSize.Height - label.DesiredSize.Height) < .01, $"Preview/export layout differs: {frame.DesiredSize} vs {label.DesiredSize}");
-            } finally { Clean(editor); }
+                var exportInput = (TextBox)label.Child;
+                Assert(input.ActualWidth == exportInput.ActualWidth && input.ActualHeight == exportInput.ActualHeight, "Native text content extents differ");
+                byte[] Render(TextBox text) {
+                    var image = new RenderTargetBitmap((int)Math.Ceiling(text.ActualWidth), (int)Math.Ceiling(text.ActualHeight), 96, 96, PixelFormats.Pbgra32);
+                    image.Render(text); return Pixels(image);
+                }
+                var exported = Render(exportInput);
+                Assert(Render(input).SequenceEqual(exported), "Editable native text glyph pixels differ from exported text");
+                input.IsReadOnly = true; input.UpdateLayout();
+                Assert(Render(input).SequenceEqual(exported), "Read-only selection text glyph pixels differ from exported text");
+                Assert(InputMethod.GetIsInputMethodEnabled(input) && input.AcceptsReturn, "Native multilingual multiline input must remain enabled");
+            } finally { Clean(editor); Theme.Select(previousTheme); }
         });
         test("partially cropped text retains an accessible move handle", () => {
             var editor = new EditorWindow(app, photo);

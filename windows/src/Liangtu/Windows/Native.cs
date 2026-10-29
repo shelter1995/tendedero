@@ -53,16 +53,7 @@ internal static class Native
     }
     public static bool Fullscreen(System.Windows.Forms.Screen s)
     {
-        var h = GetForegroundWindow();
-        if (h == IntPtr.Zero)
-            return false;
-        var cls = new System.Text.StringBuilder(256);
-        GetClassName(h, cls, 256);
-        if (cls.ToString() is "WorkerW" or "Progman" or "Shell_TrayWnd")
-            return false;
-        GetWindowRect(h, out var r);
-        var b = s.Bounds;
-        return r.Left <= b.Left && r.Top <= b.Top && r.Right >= b.Right && r.Bottom >= b.Bottom;
+        return FullscreenPolicy.Occupied(FullscreenWindows.Read(), s.Bounds);
     }
     public static void NonActivating(Window w)
     {

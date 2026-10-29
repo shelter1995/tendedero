@@ -17,10 +17,10 @@ public sealed partial class App
         var description = Theme.Text("让截图留在手边。复制、标注、拖拽分享，\n都在屏幕上方的一根绳子上。", 13, Theme.Muted);
         description.LineHeight = 24; description.Margin = new Thickness(0, 12, 0, 18); panel.Children.Add(description);
         panel.Children.Add(new Border { Height = 1, Background = Theme.Outline, Margin = new Thickness(0, 0, 0, 18) });
-        var credits = Theme.Text("基于 Alejandro Buján 的 Tendedero v1.6.0\nWindows 个人移植版 · MIT 许可\n本地运行，无账户、遥测或自动更新。", 12, Theme.Muted);
+        var credits = Theme.Text("基于 Alejandro Buján 的 Tendedero v1.6.0\nWindows 个人移植版 · MIT 许可\n图片本地处理，无账户或遥测；手动检查 Windows 更新。", 12, Theme.Muted);
         credits.LineHeight = 22; panel.Children.Add(credits);
         var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 24, 0, 0) };
-        actions.Children.Add(Theme.Button("使用说明", () => Theme.Shell(Path.Combine(AppContext.BaseDirectory, "README.md"))));
+        actions.Children.Add(Theme.Button("使用说明", () => { var readme = Path.Combine(AppContext.BaseDirectory, "README.md"); Theme.Shell(File.Exists(readme) ? readme : Path.Combine(AppContext.BaseDirectory, "使用说明.txt")); }));
         var close = Theme.Primary("关闭", window.Close); close.IsCancel = true; actions.Children.Add(close);
         panel.Children.Add(actions); window.Content = panel;
         return window;

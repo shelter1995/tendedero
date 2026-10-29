@@ -1,158 +1,52 @@
-# Liangtu (晾图)
+# Liangtu · screenshots on a clothesline for Windows
 
-English · [简体中文](README.zh-CN.md)
+Hang screenshots at the top of your screen, copy or annotate them, drag them to another app, collect them in a basket, or pin them to your desktop.
 
-Liangtu hangs screenshots on a clothesline at the top of your Windows desktop. Move the pointer to the top edge to bring them down, then copy, annotate, or drag them into another app.
+Liangtu is a community Windows port of [Tendedero](https://github.com/alejandrobujan/tendedero) by Alejandro Buján. It uses its own name and icon and is not an official Tendedero Windows release. [简体中文](README.zh-CN.md)
 
-This is a community Windows port of [Tendedero](https://github.com/alejandrobujan/tendedero) by Alejandro Buján, with its own name and icon. For the original macOS app, visit the upstream project.
+## Download 0.10.7
 
-[For users](#for-users) · [For developers](#for-developers) · [Windows source](https://github.com/shelter1995/tendedero/tree/windows-port/windows)
+- [Windows x64 installer](https://github.com/shelter1995/tendedero/releases/download/windows-v0.10.7/Liangtu-0.10.7-Setup-x64-r1.exe), recommended for most users. Includes the .NET desktop runtime and installs for the current user.
+- [Portable Windows x64 ZIP](https://github.com/shelter1995/tendedero/releases/download/windows-v0.10.7/Liangtu-0.10.7-Windows-x64-portable.zip). Extract the entire archive and run Start.cmd or Liangtu.exe.
+- [Release notes and SHA-256 files](https://github.com/shelter1995/tendedero/releases/tag/windows-v0.10.7). Use Installer-r1.zip for in-app updates of installed copies, or portable.zip for portable copies.
 
-## For users
+Save your edits and quit the old tray process before upgrading. Version 0.8.2 and earlier require a manual upgrade; later versions include a Windows update entry. Existing settings and inbox files use the same data directory.
 
-### Get a build
+Targets Windows 10/11 x64, with validation focused on Windows 11. Builds are unsigned and Windows may show an unknown-publisher prompt. SHA-256 files verify integrity. No native ARM64 build is available.
 
-[Liangtu 0.7.2 for Windows](https://github.com/shelter1995/tendedero/releases/tag/windows-v0.7.2) is available as a pre-release. Most users should choose the installer; the portable ZIP runs without installation. Both downloads have a matching `.sha256` file on the release page.
+## Everyday controls
 
-- [Download the x64 installer](https://github.com/shelter1995/tendedero/releases/download/windows-v0.7.2/Liangtu-0.7.2-Setup-x64-r1.exe)
-- [Download the portable ZIP](https://github.com/shelter1995/tendedero/releases/download/windows-v0.7.2/Liangtu-0.7.2-Windows-x64-portable.zip)
+Move the pointer to the top edge, or press Ctrl+Alt+T, to show/hide the line. Ctrl+Alt+S captures a region. Both shortcuts can be changed or cleared. Win+Shift+S continues to use the Windows Snipping Tool; enable screenshot handling to receive its images and recordings. Images copied from other applications require the separate “Hang copied images” option, off by default.
 
-The app targets Windows 10/11 x64, with testing focused on Windows 11. Windows 10 still needs validation, and no native ARM64 build is provided. The live glass effect uses Windows 11 composition interfaces. Self-contained packages include the .NET desktop runtime, so users do not need to install it separately.
+Click a card to copy the original, double-click to open, hold the image to annotate, or drag to share. Hold the clip for 450ms to pin the image. Desktop pins support dragging and wheel zoom; Esc, close, or “Return to line” hangs the image back. The separate basket action stores it instead.
 
-**Portable ZIP:** extract the entire archive into a folder, then run `Start.cmd` or `Liangtu.exe`. Keep all bundled files together, including `GlassNative.dll`.
+The basket provides history, search, multi-selection, preview, remounting, and saved copies. Taking down a card or exceeding the presentation capacity preserves its file. Only the explicit Recycle Bin command deletes files.
 
-**Installer:** run the setup executable and follow the wizard. It installs for the current user without administrator rights. Selecting the optional video component downloads about 65 MB of FFmpeg files, trying the Nanjing University mirror first and official sources if it fails. Every source is checked against the same fixed SHA-256. The image-only installation can run offline. For offline video installation, place `jellyfin-ffmpeg_8.1.3-1_portable_win64-clang-gpl.zip` beside the installer without extracting it; see the [video component instructions](https://github.com/shelter1995/tendedero/blob/windows-port/windows/installer/video-component-readme.txt). Builds are currently unsigned.
+Image and video annotation share text, pen, highlighter, arrows, shapes, selection and transformations. Video adds trim and annotation time ranges. Saved annotations are flattened into pixels rather than stored as an editable project.
 
-### First use
+Seven themes cover the shelf and editing windows. Version 0.10.7 adds continuous frame transitions between the shelf and desktop pins, a separate toolbar fade, and faster gesture responses while retaining bounded-window handoffs that avoid full-screen shelf resizing.
 
-1. Launch Liangtu. It stays in the system tray; move the pointer to the top edge or press `Ctrl+Alt+T` to show the clothesline.
-2. Enable screenshot handling in the tray menu to receive Windows screenshots and recordings. `Win+Shift+S` still opens the Windows Snipping Tool. Liangtu also has its own region capture shortcut, `Ctrl+Alt+S`.
-3. To receive images copied from other apps, enable “Hang copied images” (`挂上复制的图片`). This is off by default and ignores text, file lists, and common clipboard privacy markers.
+The line normally avoids full-screen applications. Game do-not-disturb hides pins and suppresses automatic reveals and sounds while continuing collection; the display hotkey remains available for an explicit reveal. Measured capture origins take priority. Unmeasured third-party entries use the clipboard-event pointer as a placement heuristic, not a claim that every capture tool exposes its exact selection.
 
-Both global shortcuts can be changed or cleared in the tray menu. Short sounds accompany hanging, copying, removing, and editing items; the tray sound toggle mutes them. You can also choose card sizes, the number of items to keep, extra folders to watch, and whether the line appears over full-screen apps.
+## Video and local data
 
-### Everyday controls
+The installer optionally downloads FFmpeg/FFprobe, with fallback sources, fixed SHA-256 verification, and an offline component ZIP option. Portable packages do not bundle FFmpeg; use a local installation or tools/ directory. Image features work without it. See the [video component instructions](https://github.com/shelter1995/tendedero/blob/windows-port/windows/installer/video-component-readme.txt).
 
-| Action | Result |
-| --- | --- |
-| Click a screenshot | Start copying on mouse release; show “Copying…” until the image reaches the clipboard |
-| Double-click | Copy on the first click, then open with the default application on the second |
-| Middle-click | Quick preview |
-| Press and hold | Annotate an image or trim a video |
-| Drag into another app | Offer the image/file to that app |
-| Drag into a folder | Request a move through Windows Shell; the receiver determines the result |
-| Right-click a card | Copy, open, reveal in Explorer, or remove it |
-| Click the tray icon | Show or hide the line |
-| Right-click the tray icon | Open settings and quit the app |
+Settings and inbox data are stored in `%LOCALAPPDATA%/Liangtu`. Screenshot processing is local, with no account, telemetry, or screenshot uploads. Update checks/downloads and video component installation require a connection. Uninstalling keeps data by default; removal must be chosen explicitly. Saving or trimming can replace the original file, so review the result before saving.
 
-Removing an item from Liangtu's inbox sends its file to the Recycle Bin. Removing an external file normally takes it off the line without deleting it; its context menu also has an explicit Recycle Bin command. The retention limit can remove older inbox items, so save anything you want to keep elsewhere.
+## Build from source
 
-### Edit images and video
-
-The image editor has drawing, highlighting, arrows, shapes, text, cropping, rotation, and a local eraser. Hold `Shift` for squares, circles, or lines at 45-degree increments. Use the mouse wheel to zoom and `Space` + drag or middle-button drag to pan. `F` fits the image to the window, and `Ctrl+1` shows actual size. View zoom does not change the exported pixel dimensions.
-
-The text tool lets you type directly on the image, add multiple text blocks, and change their font, size, color, bold, and italic styles. Select an existing block to change its style or drag its move handle to reposition it. Text remains editable during the current editing session and is flattened into pixels when saved; reopening the image does not restore text objects.
-
-Use `Ctrl+Z` to undo, `Ctrl+Y` or `Ctrl+Shift+Z` to redo, and `Ctrl+S` to save. Saving an ordinary image writes back to that file; multi-frame images and WebP edits are saved as a separate PNG in the inbox.
-
-Video preview supports playback and seeking. To trim, drag the timeline handles or enter start/end times, then save the selected segment. Selection changes support undo/redo. **Saving a video segment replaces the original file** after the new file has been generated successfully. Selection history cannot restore a video after it has been saved.
-
-Video thumbnails and trimming require FFmpeg. For a portable build, put `ffmpeg.exe` in the application's `tools/` folder or make it available on `PATH`. Without it, image features still work and video thumbnails use a placeholder.
-
-### Local data and updates
-
-The app has no account, telemetry, screenshot upload, or automatic updater. Everyday use is local. The optional installer video download and opening external links are separate network actions.
-
-| Location | Contents |
-| --- | --- |
-| `%LOCALAPPDATA%/Liangtu/Inbox` | Captures and copied images stored by Liangtu |
-| `%LOCALAPPDATA%/Liangtu/settings.json` | Settings and paths to items on the line |
-| `%LOCALAPPDATA%/Liangtu/app.log` | Local error log |
-
-Before replacing or upgrading a build, save your edits and quit through the tray menu. When uninstalling, settings and inbox images are kept by default; you can explicitly choose to delete them. Deletion cannot be undone, and originals in external folders are not affected. Existing installed copies must be upgraded through the new installer to receive this uninstall option. Removing a portable application folder leaves the data directory intact. Start at login is optional.
-
-The current “Check for Updates” menu item opens the upstream **macOS** releases page. It does not update this Windows port.
-
-### Current limits and feedback
-
-Some Windows-specific dialogs are still Chinese-only. Physical mixed-DPI multi-monitor setups, more drag-and-drop receivers, and Windows 10 need further testing. Automated checks of simulated displays do not cover every desktop setup.
-
-When reporting a problem, include the app version, Windows version, display scaling and arrangement, reproduction steps, and the error message. Check screenshots and logs for private content or file paths before sharing them.
-
-## For developers
-
-The Windows code lives under `windows/` on the **`windows-port` branch**. The default branch carries this overview; use the branch-specific clone command below to get the Windows implementation. It uses C#/.NET 8 and WPF, with a small C++ adapter for Windows Composition. The upstream Swift project remains at the repository root.
-
-### Build requirements
-
-- A Windows x64 development machine and the .NET 8 SDK.
-- PowerShell 7 (`pwsh`). Packaging uses APIs unavailable in Windows PowerShell 5.1.
-- Visual Studio 2022 Build Tools with **Desktop development with C++**, the x64 MSVC toolchain, and a Windows 10/11 SDK. The native script expects the standard Visual Studio Installer and Windows Kits locations.
-- FFmpeg and FFprobe on `PATH` for video integration checks.
-
-The checked-in icons are ready to use. Regenerating them with `scripts/make-icon.py` requires Python and Pillow.
-
-### Build and run from source
+The Windows implementation lives in [windows/ on the windows-port branch](https://github.com/shelter1995/tendedero/tree/windows-port/windows). Build requirements: Windows x64, .NET 8 SDK, PowerShell 7, Visual C++ Build Tools, and the Windows SDK.
 
 ```powershell
 git clone --branch windows-port https://github.com/shelter1995/tendedero.git
 cd tendedero/windows
-pwsh -NoProfile -File ./scripts/build-native.ps1
-dotnet build ./src/Liangtu -c Release
-dotnet ./src/Liangtu/bin/Release/net8.0-windows/Liangtu.dll --show
+pwsh -File test-safe.ps1
+pwsh -File build.ps1
 ```
 
-Run the remaining commands from `windows/`.
+`src/Liangtu` contains WPF and Windows integration; `src/Liangtu.Core` contains layout/gesture policy. Build and verification scripts are under `scripts`, with Inno Setup definitions under `installer`. Installer packaging requires Inno Setup in `.tools/InnoSetup`. The upstream Swift project remains at the repository root.
 
-### Test
+The current revision passed 486 controlled regression checks and was approved after local use. This does not cover every graphics driver, remote session, Windows 10 installation, or physical mixed-DPI setup. See the [0.10.7 verification record](https://github.com/shelter1995/tendedero/blob/windows-port/windows/docs/verification-v0.10.7.md). Include the version, display scaling/layout, reproduction steps, and error text when reporting issues; review screenshots and logs for private content before sharing.
 
-```powershell
-dotnet run --project ./tests/Core.Tests -c Release
-pwsh -NoProfile -File ./test-safe.ps1
-```
-
-The safe checks build the native adapter, render WPF controls off-screen, and exercise simulated display geometry. They do not inject mouse/keyboard input, read clipboard contents, or perform OLE drag and drop. The [source verification report](https://github.com/shelter1995/tendedero/blob/windows-port/windows/docs/source-verification.md) records the tested scope and results.
-
-For video integration and scrubbing checks on a Windows desktop:
-
-```powershell
-pwsh -NoProfile -File ./scripts/test-video.ps1
-pwsh -NoProfile -File ./scripts/test-video-scrub.ps1 -SourceVideo ./artifacts/video-fixtures/source.mp4
-```
-
-These checks generate synthetic media under `artifacts/` and may show test windows. Read `test.ps1`, `scripts/test-recording-intake.ps1`, and `scripts/test-installer.ps1` before running them; they exercise desktop or installation behavior. The additional uninstall and download-failover harnesses require isolated test installers and fixtures; `scripts/test-installer-failover.ps1` still refers to the earlier 0.6.3 test fixture, not the public 0.7.2 installer.
-
-### Package
-
-```powershell
-pwsh -NoProfile -File ./build.ps1
-```
-
-This builds the native adapter, runs core tests, and creates a self-contained portable ZIP under `dist/`, with a SHA-256 sidecar. It checks the published file manifest, bundled .NET/WPF runtime, and native DLL loading. The current package script pins .NET to 8.0.28 and needs NuGet access on the first build. It refuses to overwrite an existing release directory. FFmpeg is not included in the ZIP.
-
-To build the installer, first create the portable package and place a compatible Inno Setup 6 installation under `.tools/InnoSetup/`, with `ISCC.exe` directly in that folder. The installer source uses enhanced archive extraction and download-page APIs.
-
-```powershell
-pwsh -NoProfile -File ./scripts/package-installer.ps1 -Version 0.7.2
-```
-
-The version argument must match the portable package. FFmpeg download details and license information are in [`installer/video-component.json`](https://github.com/shelter1995/tendedero/blob/windows-port/windows/installer/video-component.json). Build outputs, downloaded tools, caches, and logs are excluded from Git.
-
-### Source layout
-
-Paths below are relative to [`windows/`](https://github.com/shelter1995/tendedero/tree/windows-port/windows).
-
-| Path | Purpose |
-| --- | --- |
-| `src/Liangtu/` | WPF app, Windows integration, and UI check entry points |
-| `src/Liangtu.Core/` | Layout, gesture policies, pixel geometry, and video selection history |
-| `native/GlassNative.cpp` | Native Windows Composition adapter |
-| `tests/` | Core tests and a manual drag-and-drop receiver |
-| `scripts/` and `installer/` | Build, packaging, and integration checks |
-| `reference/tendedero/` | Pinned upstream license and localization resources |
-
-## Credits and license
-
-Liangtu is based on Tendedero v1.6.0 by Alejandro Buján, commit `32a3e47187fdea7b2fd43b3ab5a913f0ed33724a`. The upstream [license and name/icon terms](https://github.com/shelter1995/tendedero/blob/windows-port/windows/LICENSE) are preserved. Tendedero's source code is MIT-licensed; its name and icon are excluded from that grant. Liangtu uses separate branding and is not an official Tendedero release.
-
-Upstream translations retain their attribution. The Inno Setup Chinese translation retains its contributor header, and packaging preserves the applicable .NET and FFmpeg notices.
+The original MIT license and name/icon exclusions are preserved. Packages include applicable .NET, FFmpeg and other notices. Liangtu uses independent branding and generated assets.

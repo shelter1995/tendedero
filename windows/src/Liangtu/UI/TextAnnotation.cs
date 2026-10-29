@@ -6,7 +6,9 @@ internal sealed record TextAnnotation(Guid Id, string Text, double X, double Y,
     public Border CreateLabel()
     {
         // Use the exact same text layout as the editor, without focus/selection.
-        var input = new TextBox { Text = Text, FontFamily = new FontFamily(FontFamily), FontSize = FontSize,
+        // Explicitly opt out of app input styles even if an export label is
+        // measured under a themed parent; the editable counterpart does too.
+        var input = new TextBox { Style = null, Text = Text, FontFamily = new FontFamily(FontFamily), FontSize = FontSize,
             Foreground = new SolidColorBrush(Color), FontWeight = Bold ? FontWeights.Bold : FontWeights.Normal,
             FontStyle = Italic ? FontStyles.Italic : FontStyles.Normal, Padding = new Thickness(0), BorderThickness = new Thickness(0),
             Background = Brushes.Transparent, MinWidth = 64, AcceptsReturn = true, TextWrapping = TextWrapping.NoWrap,

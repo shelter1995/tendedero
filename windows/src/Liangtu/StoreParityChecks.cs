@@ -115,13 +115,13 @@ public static class StoreParityChecks
                 return store.Items.Select(p => p.Path).SequenceEqual(paths.Skip(1).Append(newest)) && paths.All(File.Exists);
             });
 
-            await Check("store parity: automatic inbox eviction goes to the recycle bin", async () =>
+            await Check("store collection: automatic inbox eviction preserves the file", async () =>
             {
                 var store = new Store(new Settings()) { Capacity = 1 };
                 var oldest = Fixture(inInbox: true);
                 await store.Add(oldest);
                 await store.Add(Fixture());
-                return !File.Exists(oldest) && store.Items.Count == 1;
+                return File.Exists(oldest) && store.Items.Count == 1 && store.Collection.Count == 2;
             });
 
             await Check("store parity: removal notification arrives before the item leaves", async () =>
@@ -144,7 +144,7 @@ public static class StoreParityChecks
                 return called == 1 && beforeRemoval && File.Exists(photo.Path) && settings.Items.Count == 0;
             });
 
-            await Check("store parity: inbox recycle failure still silently takes the oldest photo down", async () =>
+            await Check("store collection: locked inbox file can be taken down without deletion", async () =>
             {
                 if (letGo == null || removingEvent == null)
                     return false;
@@ -204,7 +204,7 @@ public static class StoreParityChecks
                 removingEvent.AddEventHandler(store, (Action<Photo, bool>)((_, value) => quiet.Add(value)));
                 await Invoke(store, applyLimit);
                 return store.Items.Select(p => p.Path).SequenceEqual(paths.Skip(2))
-                    && !File.Exists(paths[0]) && !File.Exists(paths[1]) && paths.Skip(2).All(File.Exists)
+                    && paths.All(File.Exists) && store.Collection.Count == paths.Length
                     && quiet.Count == 2 && quiet.All(value => value) && settings.Items.SequenceEqual(paths.Skip(2));
             });
 

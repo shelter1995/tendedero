@@ -15,3 +15,4 @@ foreach($folder in @('ucrt','shared','um','winrt','cppwinrt')){$arguments+=('/I'
 $arguments+=@($source,('/Fo'+(Join-Path $projectRoot 'native\GlassNative.obj')),'/link',('/OUT:'+$out),('/IMPLIB:'+(Join-Path $projectRoot 'native\GlassNative.lib')),('/LIBPATH:'+(Join-Path $vcRoot 'lib\x64')),('/LIBPATH:'+(Join-Path $libRoot 'ucrt\x64')),('/LIBPATH:'+(Join-Path $libRoot 'um\x64')),'windowsapp.lib','CoreMessaging.lib','dwmapi.lib','user32.lib')
 & $cl @arguments
 if($LASTEXITCODE -ne 0){throw 'Native glass adapter build failed'}
+

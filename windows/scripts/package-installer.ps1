@@ -1,4 +1,4 @@
-param([string]$Version='0.7.2',[string]$InstallerRevision='1',[switch]$TestInstall,[string]$TestDataRoot='', [string]$FFmpegUrl='')
+param([string]$Version='0.9.4',[string]$InstallerRevision='1',[switch]$TestInstall,[string]$TestDataRoot='', [string]$FFmpegUrl='')
 $ErrorActionPreference='Stop'
 $projectRoot=Split-Path $PSScriptRoot -Parent
 $source=Join-Path $projectRoot ('dist/Liangtu-'+$Version)
@@ -40,6 +40,11 @@ $sha=(Get-FileHash -LiteralPath $exe).Hash
 [IO.File]::WriteAllText(($exe+'.sha256'),($sha+'  '+$base+[Environment]::NewLine),[Text.Encoding]::ASCII)
 if(-not $TestInstall){
     Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/friends-readme.txt') -Destination (Join-Path $output '使用说明.txt')
+    $updateInfo=[ordered]@{schemaVersion=1;product='Liangtu';version=$Version;runtime='win-x64';kind='installer';installerFile=$base}
+    [IO.File]::WriteAllText((Join-Path $output 'update-info.json'),($updateInfo|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
+    $upgradeHashes=[ordered]@{}
+    Get-ChildItem -LiteralPath $output -File | Where-Object {$_.Name -ne 'SHA256SUMS.json'} | Sort-Object Name | ForEach-Object {$upgradeHashes[$_.Name]=(Get-FileHash -LiteralPath $_.FullName).Hash}
+    [IO.File]::WriteAllText((Join-Path $output 'SHA256SUMS.json'),($upgradeHashes|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
     $shareZip=Join-Path $projectRoot ('dist/Liangtu-'+$Version+'-Windows-x64-Installer-r'+$InstallerRevision+'.zip')
     Compress-Archive -Path (Join-Path $output '*') -DestinationPath $shareZip -Force
     $zipHash=(Get-FileHash -LiteralPath $shareZip).Hash

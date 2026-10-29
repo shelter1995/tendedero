@@ -4,6 +4,7 @@ namespace Liangtu;
 /// These strokes are the exact layers used by upstream's glassFrame.
 public sealed class GlassBorder : Border
 {
+    internal int ArtVariant { get; set; }
     static readonly List<WeakReference<GlassBorder>> instances = new();
     public GlassBorder()
     {
@@ -12,6 +13,7 @@ public sealed class GlassBorder : Border
     }
     public static IEnumerable<GlassBorder> In(Window window)
     {
+        if (Theme.Current.Material != "canvas" || SystemParameters.HighContrast) yield break;
         for (var i = instances.Count - 1; i >= 0; i--)
         {
             if (!instances[i].TryGetTarget(out var glass))
@@ -22,10 +24,13 @@ public sealed class GlassBorder : Border
             if (glass.IsVisible && Window.GetWindow(glass) == window && glass.ActualWidth > 0 && glass.ActualHeight > 0)
             {
                 double opacity = 1;
+                bool clipped = false;
                 for (DependencyObject? p = glass; p != null && p != window; p = VisualTreeHelper.GetParent(p))
-                    if (p is UIElement element)
-                        opacity *= element.Opacity;
-                if (opacity > .02)
+                {
+                    if (p is UIElement element) opacity *= element.Opacity;
+                    if (p is Card card && !card.AllowsLiveGlassFor(glass)) clipped = true;
+                }
+                if (opacity > .02 && !clipped)
                     yield return glass;
             }
         }
@@ -34,8 +39,13 @@ public sealed class GlassBorder : Border
     {
         var rect = new Rect(0, 0, ActualWidth, ActualHeight);
         var radius = Math.Min(CornerRadius.TopLeft, Math.Min(ActualWidth, ActualHeight) / 2);
-        dc.DrawRoundedRectangle(Theme.Dark ? Theme.Brush("#3826262C") : Theme.Brush("#48FFFFFF"), null, rect, radius, radius);
-        dc.DrawRoundedRectangle(null, new Pen(new LinearGradientBrush(Color.FromArgb(140, 255, 255, 255), Color.FromArgb(31, 255, 255, 255), 90), .75), rect, radius, radius);
+        DrawFrame(dc, Theme.Current, rect, radius, ArtVariant);
+    }
+    internal static void DrawFrame(DrawingContext dc, ThemeProfile profile, Rect rect, double radius, int variant)
+    {
+        if (profile.OriginalArtwork && !SystemParameters.HighContrast) { ThemeArtwork.Frame(dc, profile, rect, radius, variant); return; }
+        dc.DrawRoundedRectangle(Theme.Token("FrameFill"), null, rect, radius, radius);
+        dc.DrawRoundedRectangle(null, new Pen(Theme.Token("FrameEdge"), .9), rect, radius, radius);
         rect.Inflate(.5, .5);
         dc.DrawRoundedRectangle(null, new Pen(Theme.Brush("#1A000000"), .5), rect, radius + .5, radius + .5);
     }

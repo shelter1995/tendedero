@@ -132,10 +132,10 @@ public static class VideoFlowChecks
                     var endPeer = new TimelineThumbPeer(handles[1]); endPeer.SetValue(4.5);
                     Assert(Math.Abs(window.Timeline.Range.Start - 2.5) < .001 && Math.Abs(window.Playback.End - 4.5) < .001, "Handle did not set selection");
                     Assert(!window.Playback.Playing, "Dragging selection resumed playback");
-                    var inputs = Children<TextBox>(window).ToArray();
+                    var inputs = new[] { "开始时间", "结束时间" }.Select(name => Children<TextBox>(window).Single(box => (box.ToolTip as string)?.StartsWith(name, StringComparison.Ordinal) == true)).ToArray();
                     Assert(inputs[0].Text == "00:02.500" && inputs[1].Text == "00:04.500", "Time labels not synchronized");
                     window.Width = 700; window.Height = 480; window.UpdateLayout();
-                    foreach (var control in inputs.Cast<FrameworkElement>().Concat(Children<Button>(window)))
+                    foreach (var control in inputs.Cast<FrameworkElement>().Concat(Children<Button>(window)).Where(control => control.IsVisible))
                     {
                         var box = control.TransformToAncestor(window).TransformBounds(new Rect(control.RenderSize));
                         Assert(box.Left >= 0 && box.Right <= window.ActualWidth + 1 && box.Bottom <= window.ActualHeight + 1, "Control outside compact window");

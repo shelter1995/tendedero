@@ -23,7 +23,7 @@ public sealed partial class EditorWindow : Window
     RasterEraser? eraser;
     bool saving;
     internal EditorViewport Viewport => viewport;
-    bool Drawing => start != null || eraser != null;
+    bool Drawing => start != null || eraser != null || selectionStart != null;
 
     public EditorWindow(App app, Photo photo)
     {
@@ -38,16 +38,16 @@ public sealed partial class EditorWindow : Window
         Theme.WindowStyle(this);
         canvas.Children.Add(image); viewport = new EditorViewport(canvas);
         Content = BuildLayout();
-        Restore();
+        Restore(); InstallObjectMenu();
         System.Windows.Automation.AutomationProperties.SetName(canvas, "图片标注画布");
         canvas.MouseLeftButtonDown += (_, e) => {
             if (viewport.PanMode || viewport.SpaceHeld) return;
             viewport.Focus();
-            BeginStroke(e.GetPosition(canvas));
+            BeginStroke(e.GetPosition(canvas), Keyboard.Modifiers.HasFlag(ModifierKeys.Alt), e.ClickCount);
             if (Drawing) canvas.CaptureMouse();
             e.Handled = true;
         };
-        canvas.MouseMove += (_, e) => { if (Drawing) { MoveStroke(e.GetPosition(canvas), Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)); e.Handled = true; } };
+        canvas.MouseMove += (_, e) => { var point = e.GetPosition(canvas); UpdateObjectCursor(point); if (Drawing) { MoveStroke(point, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)); e.Handled = true; } };
         canvas.MouseLeftButtonUp += (_, e) => { if (Drawing) { EndStroke(e.GetPosition(canvas), Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)); if (Mouse.Captured == canvas) canvas.ReleaseMouseCapture(); e.Handled = true; } };
         canvas.LostMouseCapture += (_, _) => { if (Drawing) CancelStroke(); };
         PreviewKeyDown += OnKey;
@@ -68,7 +68,8 @@ public sealed partial class EditorWindow : Window
         var bitmap = history.Current.Image; image.Source = bitmap;
         image.Width = canvas.Width = bitmap.PixelWidth; image.Height = canvas.Height = bitmap.PixelHeight;
         viewport.SetImageSize(bitmap.PixelWidth, bitmap.PixelHeight);
-        texts.Clear(); texts.AddRange(history.Current.Texts); selectedText = null;
+        texts.Clear(); texts.AddRange(history.Current.Texts); selectedText = editingText = null;
+        shapes.Clear(); shapes.AddRange(history.Current.Shapes); selectedShape = null; RebuildShapeViews();
         RebuildTextViews();
         dimensions.Text = $"{bitmap.PixelWidth} × {bitmap.PixelHeight} px";
         undoButton.IsEnabled = history.CanUndo; redoButton.IsEnabled = history.CanRedo;
@@ -78,9 +79,9 @@ public sealed partial class EditorWindow : Window
         // View transforms live on the parent, never on this image-pixel canvas.
         canvas.Measure(new Size(canvas.Width, canvas.Height)); canvas.Arrange(new Rect(0, 0, canvas.Width, canvas.Height)); canvas.UpdateLayout();
         var bitmap = new RenderTargetBitmap((int)canvas.Width, (int)canvas.Height, 96, 96, PixelFormats.Pbgra32);
-        textLayer.Visibility = Visibility.Hidden;
+        textLayer.Visibility = Visibility.Hidden; selectionLayer.Visibility = Visibility.Hidden;
         try { bitmap.Render(canvas); }
-        finally { textLayer.Visibility = Visibility.Visible; }
+        finally { textLayer.Visibility = Visibility.Visible; selectionLayer.Visibility = Visibility.Visible; }
         if (includeText) {
             var export = new Canvas { Width = canvas.Width, Height = canvas.Height, ClipToBounds = true };
             foreach (var text in texts) {
@@ -94,7 +95,7 @@ public sealed partial class EditorWindow : Window
     }
     void Commit(BitmapSource bitmap, BitmapSource? baseline = null)
     {
-        history.Commit(bitmap, baseline ?? history.Current.Baseline, texts.Where(t => !string.IsNullOrWhiteSpace(t.Text)).ToArray()); Restore();
+        history.Commit(bitmap, baseline ?? history.Current.Baseline, texts.Where(t => !string.IsNullOrWhiteSpace(t.Text)).ToArray(), shapes); Restore();
     }
     internal void Undo()
     {
@@ -114,14 +115,26 @@ public sealed partial class EditorWindow : Window
         var rotated = new TransformedBitmap(history.Current.Image, new RotateTransform(90)); rotated.Freeze();
         var baseline = new TransformedBitmap(history.Current.Baseline, new RotateTransform(90)); baseline.Freeze();
         for (int i = 0; i < texts.Count; i++) texts[i] = texts[i].Rotate(canvas.Height);
+        for (int i = 0; i < shapes.Count; i++) shapes[i] = shapes[i].Rotate(canvas.Height);
         Commit(rotated, baseline);
     }
     Point Bounded(Point point) => new(Math.Clamp(point.X, 0, canvas.Width), Math.Clamp(point.Y, 0, canvas.Height));
-    internal void BeginStroke(Point point)
+    internal void BeginStroke(Point point, bool drawThrough = false, int clickCount = 1)
     {
-        if (Drawing || tool == "平移") return;
+        if (Drawing || tool == "平移" || viewport.SpaceHeld || viewport.PanMode) return;
         lastPointer = point;
         var p = Bounded(point);
+        CommitText(); editingText = null;
+        if (!drawThrough && tool is not ("橡皮擦" or "裁剪")) {
+            if (TryBeginTransform(point)) return;
+            BeginSelection(p);
+            if (HasSelection) {
+                if (clickCount >= 2 && selectedText is Guid textId) { selectionStart = null; shapeBefore = null; textBefore = null; SelectText(textId); }
+                return;
+            }
+            if (tool == "选择") return;
+        }
+        selectedText = selectedShape = null; RebuildTextViews(); UpdateSelectionView();
         if (tool == "文字")
         {
             AddText(p); return;
@@ -129,7 +142,7 @@ public sealed partial class EditorWindow : Window
         if (tool == "橡皮擦")
         {
             eraser = new RasterEraser(history.Current.Image, history.Current.Baseline); eraseLast = p;
-            eraser.Erase(p, p, brushWidth * 5); image.Source = eraser.Image; return;
+            eraser.Erase(p, p, brushWidth * 5); EraseObjects(p, p); image.Source = eraser.Image; return;
         }
         start = p;
         if (tool is "画笔" or "荧光笔")
@@ -149,7 +162,8 @@ public sealed partial class EditorWindow : Window
     {
         lastPointer = point;
         var q = Bounded(point);
-        if (eraser != null) { eraser.Erase(eraseLast, q, brushWidth * 5); eraseLast = q; return; }
+        if (selectionStart != null) { DragSelection(point, constrain); return; }
+        if (eraser != null) { eraser.Erase(eraseLast, q, brushWidth * 5); EraseObjects(eraseLast, q); eraseLast = q; return; }
         if (start is not Point p || active == null) return;
         if (stroke != null) { stroke.Points.Add(q); return; }
         if (active is System.Windows.Shapes.Path path)
@@ -171,6 +185,7 @@ public sealed partial class EditorWindow : Window
     }
     internal bool UpdateShapeConstraint(bool constrain)
     {
+        if (selectionStart != null) { DragSelection(lastPointer, constrain); return true; }
         if (start == null || active == null || tool is not ("矩形" or "圆形" or "直线" or "箭头")) return false;
         MoveStroke(lastPointer, constrain); return true;
     }
@@ -178,6 +193,7 @@ public sealed partial class EditorWindow : Window
     {
         if (!Drawing) return;
         MoveStroke(point, constrain);
+        if (selectionStart != null) { EndSelection(); return; }
         if (tool == "裁剪" && start is Point p)
         {
             if (active != null) canvas.Children.Remove(active);
@@ -188,15 +204,22 @@ public sealed partial class EditorWindow : Window
                 var cropped = new CroppedBitmap(history.Current.Image, area); cropped.Freeze();
                 var baseline = new CroppedBitmap(history.Current.Baseline, area); baseline.Freeze();
                 for (int i = 0; i < texts.Count; i++) texts[i] = texts[i].Crop(area.X, area.Y);
+                for (int i = 0; i < shapes.Count; i++) shapes[i] = shapes[i].Crop(new Rect(area.X, area.Y, area.Width, area.Height));
+                shapes.RemoveAll(s => s.Bounds.IsEmpty);
                 Commit(cropped, baseline);
             } else Restore();
         }
         else if (active is Rectangle or Ellipse && (active.Width < .5 || active.Height < .5)) { ClearGesture(); Restore(); }
         else if (active is System.Windows.Shapes.Path path && (path.Data == null || path.Data.IsEmpty())) { ClearGesture(); Restore(); }
         else if (eraser == null && stroke == null && start is Point origin && (Bounded(point) - origin).Length < .5) { ClearGesture(); Restore(); }
-        else { var bitmap = Flatten(false); ClearGesture(); Commit(bitmap); }
+        else if (eraser != null) { var bitmap = eraser.Image; bitmap.Freeze(); ClearGesture(); Commit(bitmap); }
+        else {
+            Guid? created = null;
+            if (active != null) { var shape = ShapeAnnotation.FromView(active); shapes.Add(shape); created = shape.Id; }
+            ClearGesture(); Commit(history.Current.Image); selectedShape = created; UpdateSelectionView();
+        }
     }
-    void ClearGesture() { start = null; active = null; stroke = null; eraser = null; }
+    void ClearGesture() { start = null; active = null; stroke = null; eraser = null; selectionStart = null; shapeBefore = null; textBefore = null; transformHandle = null; }
     void CancelStroke()
     {
         if (!Drawing) return;
@@ -204,10 +227,19 @@ public sealed partial class EditorWindow : Window
     }
     void OnKey(object sender, KeyEventArgs e)
     {
+        if(AnnotationTextEditor.HasComposition(e.OriginalSource as DependencyObject))return;
+        if(e.Key==Key.S&&Keyboard.Modifiers==ModifierKeys.Control){Save();e.Handled=true;return;}
+        if(AnnotationControls.IsRangeInput(e.OriginalSource as DependencyObject)){
+            var modifiers=Keyboard.Modifiers;
+            if(e.Key==Key.Z&&modifiers==ModifierKeys.Control){Undo();e.Handled=true;}
+            else if(e.Key==Key.Y&&modifiers==ModifierKeys.Control||e.Key==Key.Z&&modifiers==(ModifierKeys.Control|ModifierKeys.Shift)){Redo();e.Handled=true;}
+            return;
+        }
+        if(AnnotationControls.IsAttributeInput(e.OriginalSource as DependencyObject))return;
         if (e.OriginalSource is ComboBox || e.OriginalSource is System.Windows.Controls.Primitives.ToggleButton and not RadioButton) return;
         if (e.OriginalSource is TextBox) {
             if (e.Key == Key.S && Keyboard.Modifiers == ModifierKeys.Control) { Save(); e.Handled = true; }
-            else if (e.Key == Key.Escape && selectedText != null) { CommitText(); selectedText = null; RebuildTextViews(); viewport.Focus(); e.Handled = true; }
+            else if (e.Key == Key.Escape && selectedText != null) { CommitText(); editingText = null; RebuildTextViews(); UpdateSelectionView(); viewport.Focus(); e.Handled = true; }
             return;
         }
         if (e.Key is Key.LeftShift or Key.RightShift && UpdateShapeConstraint(true)) { e.Handled = true; return; }
@@ -216,10 +248,18 @@ public sealed partial class EditorWindow : Window
         if (e.Key == Key.Z && mods == ModifierKeys.Control) Undo();
         else if (e.Key == Key.Y && mods == ModifierKeys.Control || e.Key == Key.Z && mods == (ModifierKeys.Control | ModifierKeys.Shift)) Redo();
         else if (e.Key == Key.S && mods == ModifierKeys.Control) Save();
-        else if (e.Key == Key.Escape) { if (Drawing) CancelStroke(); else if (selectedText != null) { CommitText(); selectedText = null; RebuildTextViews(); } else Close(); }
-        else if (e.Key == Key.Delete && selectedText != null) DeleteText();
+        else if (e.Key == Key.Escape) { if (Drawing) CancelStroke(); else if (HasSelection) ClearSelection(); else Close(); }
+        else if (e.Key == Key.Delete && HasSelection && !Drawing) DeleteSelection();
         else if (e.Key == Key.Space && mods == ModifierKeys.None) viewport.SpaceHeld = true;
         else if (Drawing) return;
+        else if (e.Key == Key.Q && mods == ModifierKeys.None) SelectTool("选择");
+        else if (e.Key == Key.C && mods == ModifierKeys.Control) CopySelection();
+        else if (e.Key == Key.V && mods == ModifierKeys.Control) PasteSelection();
+        else if (e.Key == Key.D && mods == ModifierKeys.Control && HasSelection) DuplicateSelection();
+        else if (e.Key is Key.Left or Key.Right or Key.Up or Key.Down && mods is ModifierKeys.None or ModifierKeys.Shift && HasSelection) {
+            double step = mods == ModifierKeys.Shift ? 10 : 1;
+            NudgeSelection(new Vector(e.Key == Key.Left ? -step : e.Key == Key.Right ? step : 0, e.Key == Key.Up ? -step : e.Key == Key.Down ? step : 0));
+        }
         else if (e.Key is Key.Add or Key.OemPlus) viewport.ZoomBy(1.25);
         else if (e.Key is Key.Subtract or Key.OemMinus) viewport.ZoomBy(.8);
         else if (e.Key is Key.D0 or Key.NumPad0 && mods == ModifierKeys.Control || e.Key == Key.F && mods == ModifierKeys.None) viewport.Fit();

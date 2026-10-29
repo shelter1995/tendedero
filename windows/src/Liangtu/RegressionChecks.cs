@@ -72,3 +72,5 @@ public static class RegressionChecks
         await Check("watcher reloads an existing image without duplicates", async () => { var folder = Path.Combine(root, "edit-" + Guid.NewGuid()); Directory.CreateDirectory(folder); var settings = new Settings { ExtraFolders = new() { folder } }; var store = new Store(settings); using var watcher = new FolderWatch(store, settings); var path = Path.Combine(folder, "edited.png"); MediaTools.SavePng(Solid(100, 100, Colors.Red), path); await Task.Delay(1500); MediaTools.SavePng(Solid(200, 100, Colors.Blue), path); await Task.Delay(1800); return store.Items.Count == 1 && store.Items[0].Image.PixelWidth == 600 && store.Items[0].Image.PixelHeight == 300; });
     }
 }
+
+

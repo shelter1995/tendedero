@@ -13,8 +13,11 @@ internal sealed class EditorViewport : Grid
     public event Action? Changed;
     public EditorViewport(Canvas canvas)
     {
+        // Canvas tool shortcuts are commands, not hidden IME composition.
+        // Editable annotation TextBoxes opt in locally through AnnotationTextEditor.
+        InputMethod.SetIsInputMethodEnabled(this,false);
         ClipToBounds = true; Focusable = true;
-        Background = Theme.Dark ? Theme.Brush("#17181B") : Theme.Brush("#E3E5E9");
+        Background = Theme.CanvasSurface;
         document.Children.Add(canvas); document.RenderTransform = transform;
         stage.Children.Add(document); Children.Add(stage);
         SizeChanged += (_, e) => {
@@ -43,6 +46,14 @@ internal sealed class EditorViewport : Grid
         bool resized = view.ImageSize != new Size(width, height);
         document.Width = width; document.Height = height; view.ImageSize = new Size(width, height);
         if (resized || view.Fitted) view.Fit(); Apply();
+    }
+    // Selection chrome follows the same image transform, but is not clipped by
+    // the image canvas. Narrow images must not trim the controls around them.
+    public void AttachOverlay(Canvas overlay)
+    {
+        if (!document.Children.Contains(overlay)) document.Children.Add(overlay);
+        overlay.Width = document.Width; overlay.Height = document.Height;
+        Panel.SetZIndex(overlay, 200);
     }
     public void Fit() { view.Fit(); Apply(); }
     public void SetZoom(double zoom) { view.ZoomAt(zoom, new Point(ActualWidth / 2, ActualHeight / 2)); Apply(); }

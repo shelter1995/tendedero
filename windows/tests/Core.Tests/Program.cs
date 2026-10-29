@@ -18,4 +18,5 @@ Test("media filter excludes incomplete and arbitrary files",()=>{Eq(true,FileRul
 DpiChecks.Run(Test);
 VideoRangeChecks.Run(Test);
 VideoHistoryChecks.Run(Test);
+VideoElementChecks.Run(Test);
 Console.WriteLine($"{passed} passed, {failed} failed");return failed==0?0:1;

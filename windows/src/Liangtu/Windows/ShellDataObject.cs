@@ -102,3 +102,4 @@ public sealed class ShellDataObject : System.Runtime.InteropServices.ComTypes.ID
         }
     }
 }
+

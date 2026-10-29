@@ -20,7 +20,7 @@ internal static class LineMotionChecks
             var target = display;
             test("line display switch snaps layout without diagonal animation: " + target.DeviceName + " @ " + target.Scale, () => {
                 window.ApplyDisplayLayout(target);
-                var expected = target.LocalBounds.Width / 2 - 125;
+                var expected = ShelfLayout.Create(target.LocalBounds.Width, 1, app.Settings.Scale).Center(0, 0) - 125;
                 if (Math.Abs(Canvas.GetLeft(card) - expected) > .001 || System.Windows.DependencyPropertyHelper.GetValueSource(card, Canvas.LeftProperty).IsAnimated || System.Windows.DependencyPropertyHelper.GetValueSource(card, Canvas.TopProperty).IsAnimated)
                     throw new Exception($"Old-screen motion survived: expected X={expected}, actual X={Canvas.GetLeft(card)}");
             });
@@ -43,9 +43,10 @@ internal static class LineMotionChecks
             var item = new Border(); Canvas.SetLeft(item, 100); Canvas.SetTop(item, 20);
             LineMotion.Place(item, 300, 30, animate: true);
             // Offscreen clocks are attached before the first rendering tick.
-            if (!item.HasAnimatedProperties) throw new Exception("Normal reorder lost animation");
+            if (SystemParameters.ClientAreaAnimation && !LineMotion.Reflow(item).HasAnimatedProperties) throw new Exception("Normal reorder lost animation");
+            if (item.HasAnimatedProperties) throw new Exception("Reorder invalidates Canvas layout every frame");
             LineMotion.Place(item, 800, 40, animate: false);
-            if (Canvas.GetLeft(item) != 800 || Canvas.GetTop(item) != 40 || item.HasAnimatedProperties) throw new Exception("Reorder still affects new display");
+            if (Canvas.GetLeft(item) != 800 || Canvas.GetTop(item) != 40 || item.HasAnimatedProperties || LineMotion.Reflow(item).HasAnimatedProperties) throw new Exception("Reorder still affects new display");
         });
         app.Store.Items.Clear();
     }

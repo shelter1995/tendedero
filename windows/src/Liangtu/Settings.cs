@@ -12,11 +12,14 @@ public sealed class Settings
     }
     public bool HoverReveal { get; set; } = true;
     public bool NewReveal { get; set; } = true;
+    public bool GameDoNotDisturb { get; set; }
     public bool OverFullscreen
     {
         get; set;
     }
+    public int FullscreenProtectionRevision { get; set; }
     public bool Sounds { get; set; } = true;
+    public bool ConfirmBeforeDelete { get; set; } = true;
     public bool Welcomed
     {
         get; set;
@@ -38,6 +41,11 @@ public sealed class Settings
     public int[] AnnotationCustomColors { get; set; } = Enumerable.Repeat(0xFFFFFF, 16).ToArray();
     public List<string> ExtraFolders { get; set; } = new();
     public List<string> Items { get; set; } = new();
+    public List<string> Collection { get; set; } = new();
+    public int CollectionRevision { get; set; }
+    public bool AutoHang { get; set; } = true;
+    public string ThemeId { get; set; } = "system";
+    public bool IncludePreviewUpdates { get; set; }
     public static string Root { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Liangtu");
     public static string Inbox => Path.Combine(Root, "Inbox");
     public static Settings Load()
@@ -51,10 +59,17 @@ public sealed class Settings
             if (!new[] { 0, 25, 50, 100 }.Contains(settings.Keep))
                 settings.Keep = 0;
             settings.Items ??= new();
+            settings.Collection ??= new();
+            if (!ThemeProfiles.Valid(settings.ThemeId)) settings.ThemeId = "system";
             settings.ExtraFolders ??= new();
+            if (settings.FullscreenProtectionRevision < 1) {
+                if (settings.OverFullscreen) Log("Fullscreen protection upgrade: automatic display over fullscreen disabled; manual reveal remains available.");
+                settings.OverFullscreen = false;
+                settings.FullscreenProtectionRevision = 1;
+            }
             return settings;
         }
-        catch { return new(); }
+        catch { return new() { FullscreenProtectionRevision = 1 }; }
     }
     public void Save()
     {
@@ -73,3 +88,4 @@ public sealed class Settings
         catch { }
     }
 }
+
