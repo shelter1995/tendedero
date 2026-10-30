@@ -1,3 +1,5 @@
+> **Development has moved to [shelter1995/liangtu](https://github.com/shelter1995/liangtu).** Use the independent repository for current source, issues, and releases. This fork and its existing downloads remain available for older installations.
+
 # Liangtu · screenshots on a clothesline for Windows
 
 Hang screenshots at the top of your screen, copy or annotate them, drag them to another app, collect them in a basket, or pin them to your desktop.
