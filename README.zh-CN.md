@@ -1,3 +1,5 @@
+> **晾图已迁移至独立仓库 [shelter1995/liangtu](https://github.com/shelter1995/liangtu)。** 后续源码、问题反馈和版本发布均在新仓库维护；本 fork 及已有下载保留，供旧版本过渡使用。
+
 # 晾图 · Liangtu for Windows
 
 把截图挂在屏幕顶端，随手复制、拖放、标注、收进篮子，或长按夹子钉在桌面。
